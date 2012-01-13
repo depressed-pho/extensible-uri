@@ -1,6 +1,4 @@
--- |The purpose of this library is to provide an uniform way to
--- manipulate generic and scheme-specific URIs in a type-safe and
--- RFC-compliant manner.
+-- |Generic URI with no assumptions of any particular schemes.
 module Data.URI
     ( Scheme
     )

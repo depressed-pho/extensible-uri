@@ -20,7 +20,9 @@ import Data.CaseInsensitive
 import Data.Convertible.Base
 import Data.Default
 import Data.Hashable
+import Data.Monoid.Unicode
 import Data.String
+import Data.Semigroup
 import Data.URI.Internal
 import Data.Typeable
 import Prelude hiding (takeWhile)
@@ -43,6 +45,13 @@ newtype Scheme = Scheme CIAscii
 -- |'fromString' is a fast but unsafe way to create 'Scheme' such that
 -- no validation on the string is performed.
 deriving instance IsString Scheme
+
+-- |'Scheme' forms a 'Semigroup' with string concatenation as the
+-- operation. Since 'Scheme's can not be empty, they don't form a
+-- 'Monoid'.
+instance Semigroup Scheme where
+    {-# INLINE (<>) #-}
+    Scheme a <> Scheme b = Scheme (a ⊕ b)
 
 instance Default (Parser Scheme) where
     {-# INLINEABLE def #-}
