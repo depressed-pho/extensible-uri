@@ -1,0 +1,51 @@
+Name:          extensible-uri
+Synopsis:      Generic URIs that can be specialised to specific schemes
+Description:
+    .
+    The purpose of this library is to provide an uniform way to
+    manipulate generic and scheme-specific URIs in a type-safe and
+    RFC-compliant manner.
+    .
+Version:       0.1
+License:       PublicDomain
+License-File:  COPYING
+Author:        PHO <pho at cielonegro dot org>
+Maintainer:    PHO <pho at cielonegro dot org>
+Stability:     experimental
+Homepage:      https://github.com/phonohawk/extensible-uri
+Bug-Reports:   https://github.com/phonohawk/extensible-uri/issues
+Category:      Data, Codec, Network
+Tested-With:   GHC == 7.0.3
+Cabal-Version: >= 1.10
+Build-Type:    Simple
+
+Source-Repository head
+    Type:     git
+    Location: git://github.com/phonohawk/extensible-uri.git
+
+Library
+    Exposed-Modules:
+        Data.URI
+
+    Other-Modules:
+        Data.URI.Internal
+        Data.URI.Internal.Scheme
+
+    Build-Depends:
+        ascii                == 0.0.*,
+        attempt              == 0.3.*,
+        attoparsec           == 0.10.*,
+        base                 == 4.*,
+        base-unicode-symbols == 0.2.*,
+        bytestring           == 0.9.*,
+        case-insensitive     == 0.4.*,
+        convertible-text     == 0.4.*,
+        data-default         == 0.3.*,
+        hashable             == 1.1.*,
+        semigroups           == 0.8.*
+
+    Default-Language:
+        Haskell2010
+
+    GHC-Options:
+        -Wall
