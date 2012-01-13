@@ -46,7 +46,7 @@ newtype Scheme = Scheme CIAscii
 -- no validation on the string is performed.
 deriving instance IsString Scheme
 
--- |'Scheme' forms a 'Semigroup' with string concatenation as the
+-- |'Scheme's form a 'Semigroup' with string concatenation as the
 -- operation. Since 'Scheme's can not be empty, they don't form a
 -- 'Monoid'.
 instance Semigroup Scheme where
