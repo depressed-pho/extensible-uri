@@ -53,6 +53,8 @@ instance Semigroup Scheme where
     {-# INLINE (<>) #-}
     Scheme a <> Scheme b = Scheme (a ⊕ b)
 
+-- |'Parser' for 'Scheme's. May fail if the first letter is not an
+-- ASCII alphabet.
 instance Default (Parser Scheme) where
     {-# INLINEABLE def #-}
     def = do x  ← satisfy first
