@@ -53,8 +53,8 @@ instance Semigroup Scheme where
     {-# INLINE (<>) #-}
     Scheme a <> Scheme b = Scheme (a ⊕ b)
 
--- |'Parser' for 'Scheme's. May fail if the first letter is not an
--- ASCII alphabet.
+-- |'Parser' for 'Scheme's which fails without consuming any input if
+-- the first letter is not an ASCII alphabet.
 instance Default (Parser Scheme) where
     {-# INLINEABLE def #-}
     def = do x  ← satisfy first
@@ -75,12 +75,13 @@ instance Default (Parser Scheme) where
           {-# INLINE fromBS #-}
           fromBS = Scheme ∘ A.toCIAscii ∘ A.unsafeFromByteString
 
--- |Extract a 'CIAscii' with all letters lowercased.
+-- |Extract a 'CIAscii' from 'Scheme' with all letters lowercased.
 instance ConvertSuccess Scheme CIAscii where
     {-# INLINE convertSuccess #-}
     convertSuccess (Scheme s) = foldCase s
 
--- |Create an 'AsciiBuilder' with all letters lowercased.
+-- |Create an 'AsciiBuilder' from 'Scheme' with all letters
+-- lowercased.
 instance ConvertSuccess Scheme AsciiBuilder where
     {-# INLINE convertSuccess #-}
     convertSuccess = A.toAsciiBuilder ∘ A.fromCIAscii ∘ cs

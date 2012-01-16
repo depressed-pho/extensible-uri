@@ -1,22 +1,34 @@
 {-# LANGUAGE
     DeriveDataTypeable
+  , FlexibleInstances
   , GeneralizedNewtypeDeriving
+  , MultiParamTypeClasses
   , StandaloneDeriving
+  , TemplateHaskell
+  , TypeSynonymInstances
   , UnicodeSyntax
   #-}
 module Data.URI.Internal.UserInfo
     ( UserInfo
     )
     where
+import Control.Applicative
+import qualified Codec.URI.PercentEncoding as PE
+import Data.Ascii (Ascii, AsciiBuilder)
+import qualified Data.Ascii as A
+import Data.Attoparsec.Char8
 import Data.ByteString.Char8 (ByteString)
+import Data.Convertible.Base
 import Data.Data
+import Data.Default
 import Data.Hashable
 import Data.Monoid
 import Data.Monoid.Unicode
 import Data.Semigroup
 import Data.String
-
--- userinfo    = *( unreserved / pct-encoded / sub-delims / ":" )
+import Data.URI.Internal
+import Prelude hiding (takeWhile)
+import Prelude.Unicode
 
 -- |The userinfo subcomponent may consist of a user name and,
 -- optionally, scheme-specific information about how to gain
@@ -39,3 +51,46 @@ deriving instance IsString UserInfo
 instance Semigroup UserInfo where
     {-# INLINE CONLIKE (<>) #-}
     (<>) = (⊕)
+
+-- |'Parser' for 'UserInfo' which may fail after consuming arbitrary
+-- number of input.
+instance Default (Parser UserInfo) where
+    {-# INLINEABLE def #-}
+    def = do src ← takeWhile $ \c → isAllowedInUserInfo c ∨ isPctEncoded c
+             case PE.decode $ A.unsafeFromByteString src of
+               Right dst → pure $ UserInfo dst
+               Left  e   → fail $ show (e ∷ PE.DecodingFailed)
+          <?>
+          "userinfo"
+
+isAllowedInUserInfo ∷ Char → Bool
+isAllowedInUserInfo c
+    = isUnreserved c ∨
+      isSubDelim   c ∨
+      ':' ≡ c
+
+-- |Extract a 'ByteString' from 'UserInfo'.
+instance ConvertSuccess UserInfo ByteString where
+    {-# INLINE convertSuccess #-}
+    convertSuccess (UserInfo ui) = ui
+
+-- |Create an 'AsciiBuilder' from 'UserInfo' with all unsafe letters
+-- percent-encoded.
+instance ConvertSuccess UserInfo AsciiBuilder where
+    {-# INLINE convertSuccess #-}
+    convertSuccess = A.toAsciiBuilder ∘ PE.encode isAllowedInUserInfo ∘ cs
+
+-- |Create an 'UserInfo' from 'ByteString'.
+instance ConvertSuccess ByteString UserInfo where
+    {-# INLINE CONLIKE convertSuccess #-}
+    convertSuccess = UserInfo
+
+-- |Try to parse an 'UserInfo' from 'Ascii' with decoding all
+-- percent-encoded octets.
+instance ConvertAttempt Ascii UserInfo where
+    {-# INLINE convertAttempt #-}
+    convertAttempt = parseAttempt' def
+
+deriveAttempts [ ([t| UserInfo |], [t| AsciiBuilder |])
+               , ([t| UserInfo |], [t| ByteString   |])
+               ]

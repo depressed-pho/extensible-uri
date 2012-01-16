@@ -2,9 +2,10 @@
     UnicodeSyntax
   #-}
 module Data.URI.Internal
-    ( isAlpha_w8
+    ( isUnreserved
+    , isPctEncoded
     , isHexDigit_w8
-    , isUnreserved_w8
+    , isSubDelim
 
     , finishOff
     , parseAttempt
@@ -17,30 +18,27 @@ import Control.Monad.Unicode
 import Data.Ascii (Ascii)
 import qualified Data.Ascii as A
 import Data.Attempt
+import qualified Data.Attoparsec as B
 import Data.Attoparsec.Char8
 import Data.ByteString (ByteString)
 import Data.Word
 import Prelude.Unicode
 
-isAlpha_w8 ∷ Word8 → Bool
-{-# INLINE isAlpha_w8 #-}
-isAlpha_w8 w = (w ≥ 0x41 ∧ w ≤ 0x5A) ∨ -- 'A' ≤ w ≤ 'Z'
-               (w ≥ 0x61 ∧ w ≤ 0x7A)   -- 'a' ≤ w ≤ 'z'
+isUnreserved ∷ Char → Bool
+{-# INLINE isUnreserved #-}
+isUnreserved = inClass "a-zA-Z0-9._~-"
+
+isPctEncoded ∷ Char → Bool
+{-# INLINE isPctEncoded #-}
+isPctEncoded = inClass "%a-fA-F0-9"
 
 isHexDigit_w8 ∷ Word8 → Bool
 {-# INLINE isHexDigit_w8 #-}
-isHexDigit_w8 w = (w ≥ 0x30 ∧ w ≤ 0x39) ∨ -- '0' ≤ w ≤ '9'
-                  (w ≥ 0x41 ∧ w ≤ 0x46) ∨ -- 'A' ≤ w ≤ 'F'
-                  (w ≥ 0x61 ∧ w ≤ 0x66)   -- 'a' ≤ w ≤ 'f'
+isHexDigit_w8 = B.inClass "a-fA-F0-9"
 
-isUnreserved_w8 ∷ Word8 → Bool
-{-# INLINE isUnreserved_w8 #-}
-isUnreserved_w8 w = isAlpha_w8 w ∨
-                    isDigit_w8 w ∨
-                    w ≡ 0x2D     ∨ -- '-'
-                    w ≡ 0x2E     ∨ -- '.'
-                    w ≡ 0x5F     ∨ -- '_'
-                    w ≡ 0x7E       -- '~'
+isSubDelim ∷ Char → Bool
+{-# INLINE isSubDelim #-}
+isSubDelim = inClass "!$&'()⋅+,;="
 
 finishOff ∷ Parser α → Parser α
 {-# INLINE finishOff #-}
