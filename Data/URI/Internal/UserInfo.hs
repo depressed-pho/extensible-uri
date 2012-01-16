@@ -53,7 +53,7 @@ instance Semigroup UserInfo where
     (<>) = (⊕)
 
 -- |'Parser' for 'UserInfo' which may fail after consuming arbitrary
--- number of input.
+-- number of input letters.
 instance Default (Parser UserInfo) where
     {-# INLINEABLE def #-}
     def = do src ← takeWhile $ \c → isAllowedInUserInfo c ∨ isPctEncoded c
@@ -67,7 +67,7 @@ isAllowedInUserInfo ∷ Char → Bool
 isAllowedInUserInfo c
     = isUnreserved c ∨
       isSubDelim   c ∨
-      ':' ≡ c
+      ':' ≡        c
 
 -- |Extract a 'ByteString' from 'UserInfo'.
 instance ConvertSuccess UserInfo ByteString where
@@ -78,7 +78,9 @@ instance ConvertSuccess UserInfo ByteString where
 -- percent-encoded.
 instance ConvertSuccess UserInfo AsciiBuilder where
     {-# INLINE convertSuccess #-}
-    convertSuccess = A.toAsciiBuilder ∘ PE.encode isAllowedInUserInfo ∘ cs
+    convertSuccess = A.toAsciiBuilder
+                     ∘ PE.encode ((¬) ∘ isAllowedInUserInfo)
+                     ∘ cs
 
 -- |Create an 'UserInfo' from 'ByteString'.
 instance ConvertSuccess ByteString UserInfo where
