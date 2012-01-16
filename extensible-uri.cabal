@@ -25,6 +25,7 @@ Source-Repository head
 
 Library
     Exposed-Modules:
+        Codec.URI.PercentEncoding
         Data.URI
 
     Other-Modules:
@@ -33,17 +34,22 @@ Library
         Data.URI.Internal.UserInfo
 
     Build-Depends:
-        ascii                == 0.0.*,
-        attempt              == 0.3.*,
-        attoparsec           == 0.10.*,
-        base                 == 4.*,
-        base-unicode-symbols == 0.2.*,
-        bytestring           == 0.9.*,
-        case-insensitive     == 0.4.*,
-        convertible-text     == 0.4.*,
-        data-default         == 0.3.*,
-        hashable             == 1.1.*,
-        semigroups           == 0.8.*
+        ascii                 == 0.0.*,
+        attempt               == 0.3.*,
+        attoparsec            == 0.10.*,
+        base                  == 4.*,
+        base-unicode-symbols  == 0.2.*,
+        bytestring            == 0.9.*,
+        case-insensitive      == 0.4.*,
+        control-monad-failure == 0.7.*,
+        convertible-text      == 0.4.*,
+        data-default          == 0.3.*,
+        hashable              == 1.1.*,
+        monad-control         == 0.3.*,
+        semigroups            == 0.8.*,
+        transformers          == 0.2.*,
+        transformers-base     == 0.4.*,
+        vector                == 0.9.*
 
     Default-Language:
         Haskell2010
