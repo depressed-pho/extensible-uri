@@ -175,7 +175,7 @@ decodeStream (Stream step (s0 ∷ s) sz) = Stream (uncurry go) (DInitial, s0) $ 
           = do r ← step s
                case r of
                  Yield w s' → gotOctet ds s' w
-                 Skip    s' → go ds s'
+                 Skip    s' → pure $ Skip (ds, s')
                  Done       → gotEOF ds
 
       gotOctet ∷ DecState → s → Word8 → f (Step (DecState, s) Word8)
