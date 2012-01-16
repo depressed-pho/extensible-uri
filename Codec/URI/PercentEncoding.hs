@@ -61,6 +61,20 @@ instance Show DecodingFailed where
         = "DecodingFailed: " ⊕ msg
 
 
+-- |Percent-encode a 'ByteString' to 'Ascii' using a predicate to
+-- determine which letters are to be encoded.
+encode ∷ (Char → Bool) → ByteString → Ascii
+{-# INLINE encode #-}
+encode f = A.unsafeFromByteString ∘ encodeInIO
+    where
+      encodeInIO ∷ ByteString → ByteString
+      {-# INLINE encodeInIO #-}
+      encodeInIO
+          = unsafePerformIO ∘ unstreamBS ∘ encodeStream g ∘ streamBS
+
+      g ∷ Word8 → Bool
+      g = f ∘ A.toChar
+
 -- |Decode a percent-encoded 'Ascii' string to a 'ByteString'.
 decode ∷ ∀f. (Applicative f, Failure DecodingFailed f) ⇒ Ascii → f ByteString
 {-# INLINE decode #-}
@@ -78,20 +92,6 @@ decode = decodeInIO ∘ A.toByteString
       decodeInErrorT ∷ ByteString → ErrorT DecodingFailed IO ByteString
       {-# INLINE decodeInErrorT #-}
       decodeInErrorT = unstreamBS ∘ decodeStream ∘ streamBS
-
--- |Percent-encode a 'ByteString' to 'Ascii' using a predicate to
--- determine which letters are to be encoded.
-encode ∷ (Char → Bool) → ByteString → Ascii
-{-# INLINE encode #-}
-encode f = A.unsafeFromByteString ∘ encodeInIO
-    where
-      encodeInIO ∷ ByteString → ByteString
-      {-# INLINE encodeInIO #-}
-      encodeInIO
-          = unsafePerformIO ∘ unstreamBS ∘ encodeStream g ∘ streamBS
-
-      g ∷ Word8 → Bool
-      g = f ∘ A.toChar
 
 streamBS ∷ ∀f. Applicative f ⇒ ByteString → Stream f Word8
 {-# INLINE streamBS #-}
@@ -143,10 +143,14 @@ encodeStream ∷ ∀f. ( Applicative f
              → Stream f Word8
 {-# INLINE encodeStream #-}
 encodeStream isUnsafe (Stream step (s0 ∷ s) sz)
-    = case upperBound sz of
-        Just n  → Stream (uncurry go) (EInitial, s0) (Max $ n ⋅ 3)
-        Nothing → error "encodeStream: stream with an unknown size is not currently supported"
+    = Stream (uncurry go) (EInitial, s0) sz'
     where
+      sz' ∷ Size
+      {-# INLINE sz' #-}
+      sz' = case upperBound sz of
+              Just n  → Max $ n ⋅ 3
+              Nothing → Unknown
+
       go ∷ EncState → s → f (Step (EncState, s) Word8)
       {-# INLINE go #-}
       go EInitial s
@@ -167,8 +171,13 @@ decodeStream ∷ ∀f. ( Applicative f
              ⇒ Stream f Word8
              → Stream f Word8
 {-# INLINE decodeStream #-}
-decodeStream (Stream step (s0 ∷ s) sz) = Stream (uncurry go) (DInitial, s0) $ toMax sz
+decodeStream (Stream step (s0 ∷ s) sz)
+    = Stream (uncurry go) (DInitial, s0) sz'
     where
+      sz' ∷ Size
+      {-# INLINE sz' #-}
+      sz' = toMax sz
+
       go ∷ DecState → s → f (Step (DecState, s) Word8)
       {-# INLINE go #-}
       go ds s
@@ -226,7 +235,10 @@ mallocByteString ∷ MonadBase IO m ⇒ Int → m (ForeignPtr Word8)
 {-# INLINE mallocByteString #-}
 mallocByteString = liftBase ∘ BS.mallocByteString
 
-withForeignPtr ∷ MonadBaseControl IO m ⇒ ForeignPtr α → (Ptr α → m β) → m β
+withForeignPtr ∷ MonadBaseControl IO m
+               ⇒ ForeignPtr α
+               → (Ptr α → m β)
+               → m β
 {-# INLINE withForeignPtr #-}
 withForeignPtr fp f
     = control $ \runInIO →
