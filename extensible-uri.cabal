@@ -23,6 +23,10 @@ Source-Repository head
     Type:     git
     Location: git://github.com/phonohawk/extensible-uri.git
 
+Flag QuickCheck
+    Description: Enable instance declarations for QuickCheck.
+    Default:     True
+
 Library
     Exposed-Modules:
         Codec.URI.PercentEncoding
@@ -32,6 +36,10 @@ Library
         Data.URI.Internal
         Data.URI.Internal.Scheme
         Data.URI.Internal.UserInfo
+
+    if flag(QuickCheck)
+        Build-Depends:
+            QuickCheck == 2.4.*
 
     Build-Depends:
         ascii                 == 0.0.*,

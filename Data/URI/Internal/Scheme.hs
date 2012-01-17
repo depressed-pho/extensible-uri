@@ -1,5 +1,6 @@
 {-# LANGUAGE
-    DeriveDataTypeable
+    CPP
+  , DeriveDataTypeable
   , FlexibleInstances
   , GeneralizedNewtypeDeriving
   , MultiParamTypeClasses
@@ -12,6 +13,10 @@ module Data.URI.Internal.Scheme
     ( Scheme
     )
     where
+#if defined(MIN_VERSION_QuickCheck)
+import Control.Applicative
+import Control.Applicative.Unicode
+#endif
 import Data.Ascii (AsciiBuilder, CIAscii)
 import qualified Data.Ascii as A
 import Data.Attoparsec.Char8
@@ -27,6 +32,10 @@ import Data.URI.Internal
 import Data.Typeable
 import Prelude hiding (takeWhile)
 import Prelude.Unicode
+#if defined(MIN_VERSION_QuickCheck)
+import Test.QuickCheck.Arbitrary
+import Test.QuickCheck.Gen
+#endif
 
 -- |'Scheme' names consist of a non-empty sequence of characters
 -- beginning with a letter and followed by any combination of letters,
@@ -94,3 +103,17 @@ instance ConvertAttempt CIAscii Scheme where
 deriveAttempts [ ([t| Scheme |], [t| AsciiBuilder |])
                , ([t| Scheme |], [t| CIAscii      |])
                ]
+
+#if defined(MIN_VERSION_QuickCheck)
+instance Arbitrary Scheme where
+    arbitrary = (fromString ∘) ∘ (:) <$> x ⊛ xs
+        where
+          genAlpha = elements (['a'..'z'] ⊕ ['A'..'Z'])
+          genDigit = elements  ['0'..'9']
+          genSym   = elements  ['+', '-', '.']
+          x        = genAlpha
+          xs       = listOf $ oneof [genAlpha, genDigit, genSym]
+
+instance CoArbitrary Scheme where
+    coarbitrary (Scheme s) = coarbitrary ∘ A.toString $ A.fromCIAscii s
+#endif

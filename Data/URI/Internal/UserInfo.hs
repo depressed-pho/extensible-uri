@@ -82,7 +82,7 @@ instance ConvertSuccess UserInfo AsciiBuilder where
                      ∘ PE.encode ((¬) ∘ isAllowedInUserInfo)
                      ∘ cs
 
--- |Create an 'UserInfo' from 'ByteString'.
+-- |Create an 'UserInfo' from any 'ByteString's.
 instance ConvertSuccess ByteString UserInfo where
     {-# INLINE CONLIKE convertSuccess #-}
     convertSuccess = UserInfo
@@ -93,6 +93,7 @@ instance ConvertAttempt Ascii UserInfo where
     {-# INLINE convertAttempt #-}
     convertAttempt = parseAttempt' def
 
-deriveAttempts [ ([t| UserInfo |], [t| AsciiBuilder |])
-               , ([t| UserInfo |], [t| ByteString   |])
+deriveAttempts [ ([t| ByteString |], [t| UserInfo     |])
+               , ([t| UserInfo   |], [t| AsciiBuilder |])
+               , ([t| UserInfo   |], [t| ByteString   |])
                ]

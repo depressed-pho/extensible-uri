@@ -212,7 +212,9 @@ decodeStream (Stream step (s0 ∷ s) sz)
 
 encodeHex ∷ Word8 → (Word8, Word8)
 {-# INLINEABLE encodeHex #-}
-encodeHex w = (encodeHalf $ w `shiftR` 4, encodeHalf $ w .&. 0x0F)
+encodeHex w = ( encodeHalf $ w `shiftR` 4
+              , encodeHalf $ w .&. 0x0F
+              )
     where
       encodeHalf ∷ Word8 → Word8
       {-# INLINEABLE encodeHalf #-}
