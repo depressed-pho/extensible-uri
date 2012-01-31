@@ -39,7 +39,8 @@ Library
 
     if flag(QuickCheck)
         Build-Depends:
-            QuickCheck == 2.4.*
+            QuickCheck           == 2.4.*,
+            quickcheck-instances == 0.2.*
 
     Build-Depends:
         ascii                 == 0.0.*,
@@ -50,6 +51,7 @@ Library
         bytestring            == 0.9.*,
         case-insensitive      == 0.4.*,
         control-monad-failure == 0.7.*,
+        convertible-ascii     == 0.1.*,
         convertible-text      == 0.4.*,
         data-default          == 0.3.*,
         hashable              == 1.1.*,

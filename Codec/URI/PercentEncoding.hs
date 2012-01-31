@@ -23,6 +23,8 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as BS
 import qualified Data.ByteString.Internal as BS
+import Data.Convertible.Base
+import Data.Convertible.Instances.Ascii ()
 import Data.Monoid.Unicode
 import Data.Vector.Fusion.Stream.Monadic
 import Data.Vector.Fusion.Stream.Size
@@ -78,7 +80,7 @@ encode f = A.unsafeFromByteString ∘ encodeInIO
 -- |Decode a percent-encoded 'Ascii' string to a 'ByteString'.
 decode ∷ ∀f. (Applicative f, Failure DecodingFailed f) ⇒ Ascii → f ByteString
 {-# INLINE decode #-}
-decode = decodeInIO ∘ A.toByteString
+decode = decodeInIO ∘ cs
     where
       decodeInIO ∷ ByteString → f ByteString
       {-# INLINE decodeInIO #-}

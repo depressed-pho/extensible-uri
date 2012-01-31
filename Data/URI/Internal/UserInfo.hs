@@ -1,5 +1,6 @@
 {-# LANGUAGE
-    DeriveDataTypeable
+    CPP
+  , DeriveDataTypeable
   , FlexibleInstances
   , GeneralizedNewtypeDeriving
   , MultiParamTypeClasses
@@ -19,6 +20,7 @@ import qualified Data.Ascii as A
 import Data.Attoparsec.Char8
 import Data.ByteString.Char8 (ByteString)
 import Data.Convertible.Base
+import Data.Convertible.Instances.Ascii ()
 import Data.Data
 import Data.Default
 import Data.Hashable
@@ -29,6 +31,10 @@ import Data.String
 import Data.URI.Internal
 import Prelude hiding (takeWhile)
 import Prelude.Unicode
+#if defined(MIN_VERSION_QuickCheck)
+import Test.QuickCheck.Arbitrary
+import Test.QuickCheck.Instances ()
+#endif
 
 -- |The userinfo subcomponent may consist of a user name and,
 -- optionally, scheme-specific information about how to gain
@@ -42,6 +48,10 @@ newtype UserInfo = UserInfo ByteString
              , Show
              , Typeable
              , Monoid
+#if defined(MIN_VERSION_QuickCheck)
+             , Arbitrary
+             , CoArbitrary
+#endif
              )
 
 -- |'fromString' is a fast but unsafe way to create 'UserInfo' such
@@ -78,9 +88,7 @@ instance ConvertSuccess UserInfo ByteString where
 -- percent-encoded.
 instance ConvertSuccess UserInfo AsciiBuilder where
     {-# INLINE convertSuccess #-}
-    convertSuccess = A.toAsciiBuilder
-                     ∘ PE.encode ((¬) ∘ isAllowedInUserInfo)
-                     ∘ cs
+    convertSuccess = cs ∘ PE.encode ((¬) ∘ isAllowedInUserInfo) ∘ cs
 
 -- |Create an 'UserInfo' from any 'ByteString's.
 instance ConvertSuccess ByteString UserInfo where

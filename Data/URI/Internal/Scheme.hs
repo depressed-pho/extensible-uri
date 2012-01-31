@@ -23,6 +23,8 @@ import Data.Attoparsec.Char8
 import qualified Data.ByteString.Char8 as BS
 import Data.CaseInsensitive
 import Data.Convertible.Base
+import Data.Convertible.Instances.Ascii ()
+import Data.Convertible.Utils
 import Data.Default
 import Data.Hashable
 import Data.Monoid.Unicode
@@ -42,7 +44,7 @@ import Test.QuickCheck.Gen
 -- digits, plus (\'+\'), period (\'.\'), or hyphen (\'-\'). Comparison
 -- of 'Scheme's are always case-insensitive. See:
 -- <http://tools.ietf.org/html/rfc3986#section-3.1>
-newtype Scheme = Scheme CIAscii
+newtype Scheme = Scheme { unScheme ∷ CIAscii }
     deriving ( Eq
              , FoldCase
              , Hashable
@@ -82,23 +84,23 @@ instance Default (Parser Scheme) where
                 c ≡ '-'         ∨
                 c ≡ '.'
           {-# INLINE fromBS #-}
-          fromBS = Scheme ∘ A.toCIAscii ∘ A.unsafeFromByteString
+          fromBS = Scheme ∘ cs ∘ A.unsafeFromByteString
 
 -- |Extract a 'CIAscii' from 'Scheme' with all letters lowercased.
 instance ConvertSuccess Scheme CIAscii where
     {-# INLINE convertSuccess #-}
-    convertSuccess (Scheme s) = foldCase s
+    convertSuccess = foldCase ∘ unScheme
 
 -- |Create an 'AsciiBuilder' from 'Scheme' with all letters
 -- lowercased.
 instance ConvertSuccess Scheme AsciiBuilder where
     {-# INLINE convertSuccess #-}
-    convertSuccess = A.toAsciiBuilder ∘ A.fromCIAscii ∘ cs
+    convertSuccess = convertSuccessVia ((⊥) ∷ CIAscii)
 
 -- |Try to parse a 'Scheme' from 'CIAscii'.
 instance ConvertAttempt CIAscii Scheme where
     {-# INLINE convertAttempt #-}
-    convertAttempt = parseAttempt' def ∘ A.fromCIAscii
+    convertAttempt = parseAttempt' def ∘ cs
 
 deriveAttempts [ ([t| Scheme |], [t| AsciiBuilder |])
                , ([t| Scheme |], [t| CIAscii      |])
@@ -114,6 +116,16 @@ instance Arbitrary Scheme where
           x        = genAlpha
           xs       = listOf $ oneof [genAlpha, genDigit, genSym]
 
+    shrink = (fromString <$>) ∘ shr ∘ cs ∘ unScheme
+        where
+          shr ∷ [Char] → [String]
+          shr []       = error "internal error"
+          shr (_:[])   = []
+          shr (x:y:ys) = (x:ys) : ((x:) <$> shr (y:ys))
+
 instance CoArbitrary Scheme where
-    coarbitrary (Scheme s) = coarbitrary ∘ A.toString $ A.fromCIAscii s
+    coarbitrary = coarbitrary ∘ toString ∘ unScheme
+        where
+          toString ∷ CIAscii → String
+          toString = cs
 #endif

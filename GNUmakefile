@@ -1,3 +1,3 @@
-CONFIGURE_ARGS = -O2
+CONFIGURE_ARGS = -O2 -fQuickCheck
 
 include cabal-package.mk
