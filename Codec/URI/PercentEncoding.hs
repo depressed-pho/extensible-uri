@@ -5,7 +5,10 @@
   #-}
 -- |Fast percent-encoding and decoding for ByteStrings.
 module Codec.URI.PercentEncoding
-    ( encode
+    ( DelimitableOctet(..)
+    , DelimitedByteString
+
+    , encode
     , decode
 
     , DecodingFailed
@@ -26,6 +29,7 @@ import qualified Data.ByteString.Internal as BS
 import Data.Convertible.Base
 import Data.Convertible.Instances.Ascii ()
 import Data.Monoid.Unicode
+import qualified Data.Vector.Storable as SV
 import Data.Vector.Fusion.Stream.Monadic
 import Data.Vector.Fusion.Stream.Size
 import Data.URI.Internal
@@ -37,6 +41,15 @@ import Foreign.Storable (Storable)
 import qualified Foreign.Storable as S
 import System.IO.Unsafe
 import Prelude.Unicode
+
+-- |FIXME: docs
+data DelimitableOctet
+    = Delimiting !Word8
+    | Literal    !Word8
+
+-- |FIXME: doc
+type DelimitedByteString
+    = SV.Vector DelimitableOctet
 
 data EncState = EInitial
               | EPercent   !Word8 !Word8 -- upper and lower halves
