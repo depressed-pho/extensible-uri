@@ -39,27 +39,21 @@ Library
 
     if flag(QuickCheck)
         Build-Depends:
-            QuickCheck           == 2.4.*,
-            quickcheck-instances == 0.2.*
+            QuickCheck == 2.4.*
 
     Build-Depends:
-        ascii                 == 0.0.*,
-        attempt               == 0.3.*,
         attoparsec            == 0.10.*,
         base                  == 4.*,
         base-unicode-symbols  == 0.2.*,
+        blaze-builder         == 0.3.*,
         bytestring            == 0.9.*,
         case-insensitive      == 0.4.*,
-        control-monad-failure == 0.7.*,
-        convertible-ascii     == 0.1.*,
-        convertible-text      == 0.4.*,
-        data-default          == 0.3.*,
+        failure               == 0.2.*,
         hashable              == 1.1.*,
-        monad-control         == 0.3.*,
+        primitive             == 0.4.*,
         semigroups            == 0.8.*,
-        transformers          == 0.2.*,
-        transformers-base     == 0.4.*,
-        vector                == 0.9.*
+        vector                >= 0.9.1 && < 0.10,
+        vector-bytestring     == 0.0.*
 
     Default-Language:
         Haskell2010

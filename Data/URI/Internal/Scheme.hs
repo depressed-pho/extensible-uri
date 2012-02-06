@@ -1,37 +1,36 @@
 {-# LANGUAGE
     CPP
   , DeriveDataTypeable
-  , FlexibleInstances
+  , FlexibleContexts
   , GeneralizedNewtypeDeriving
-  , MultiParamTypeClasses
   , StandaloneDeriving
-  , TemplateHaskell
-  , TypeSynonymInstances
   , UnicodeSyntax
   #-}
 module Data.URI.Internal.Scheme
     ( Scheme
+    , parser
+    , fromByteString
+    , toBuilder
     )
     where
+import Blaze.ByteString.Builder (Builder)
+import qualified Blaze.ByteString.Builder.ByteString as BB
 #if defined(MIN_VERSION_QuickCheck)
 import Control.Applicative
 import Control.Applicative.Unicode
 #endif
-import Data.Ascii (AsciiBuilder, CIAscii)
-import qualified Data.Ascii as A
+import Control.Failure
 import Data.Attoparsec.Char8
-import qualified Data.ByteString.Char8 as BS
-import Data.CaseInsensitive
-import Data.Convertible.Base
-import Data.Convertible.Instances.Ascii ()
-import Data.Convertible.Utils
-import Data.Default
+import Data.CaseInsensitive as CI
 import Data.Hashable
 import Data.Monoid.Unicode
 import Data.String
 import Data.Semigroup
-import Data.URI.Internal
 import Data.Typeable
+import Data.URI.Internal () -- for orphan instances for ByteString
+import Data.Vector.Storable.ByteString.Char8 (ByteString)
+import qualified Data.Vector.Storable.ByteString.Char8 as C8
+import Data.Vector.Storable.ByteString.Legacy
 import Prelude hiding (takeWhile)
 import Prelude.Unicode
 #if defined(MIN_VERSION_QuickCheck)
@@ -44,14 +43,17 @@ import Test.QuickCheck.Gen
 -- digits, plus (\'+\'), period (\'.\'), or hyphen (\'-\'). Comparison
 -- of 'Scheme's are always case-insensitive. See:
 -- <http://tools.ietf.org/html/rfc3986#section-3.1>
-newtype Scheme = Scheme { unScheme ∷ CIAscii }
+newtype Scheme = Scheme { unScheme ∷ CI ByteString }
     deriving ( Eq
              , FoldCase
              , Hashable
              , Ord
-             , Show
              , Typeable
              )
+
+-- |For testing purpose only.
+instance Show Scheme where
+    show = C8.unpack ∘ foldedCase ∘ unScheme
 
 -- |'fromString' is a fast but unsafe way to create 'Scheme' such that
 -- no validation on the string is performed.
@@ -66,45 +68,40 @@ instance Semigroup Scheme where
 
 -- |'Parser' for 'Scheme's which fails without consuming any input if
 -- the first letter is not an ASCII alphabet.
-instance Default (Parser Scheme) where
-    {-# INLINEABLE def #-}
-    def = do x  ← satisfy first
-             xs ← takeWhile nonFirst
-             return ∘ fromBS $ x `BS.cons` xs
-          <?>
-          "scheme"
-        where
-          {-# INLINE first #-}
-          first = isAlpha_ascii
-          {-# INLINE nonFirst #-}
-          nonFirst c
-              = isAlpha_ascii c ∨
-                isDigit c       ∨
-                c ≡ '+'         ∨
-                c ≡ '-'         ∨
-                c ≡ '.'
-          {-# INLINE fromBS #-}
-          fromBS = Scheme ∘ cs ∘ A.unsafeFromByteString
+parser ∷ Parser Scheme
+{-# INLINEABLE parser #-}
+parser = do x  ← satisfy first
+            xs ← takeWhile nonFirst
+            -- FIXME: rewrite this
+            return $ Scheme $ CI.mk $ x `C8.cons` fromLegacyByteString xs
+         <?>
+         "scheme"
+    where
+      {-# INLINE first #-}
+      first = isAlpha_ascii
+      {-# INLINE nonFirst #-}
+      nonFirst c
+          = isAlpha_ascii c ∨
+            isDigit c       ∨
+            c ≡ '+'         ∨
+            c ≡ '-'         ∨
+            c ≡ '.'
 
--- |Extract a 'CIAscii' from 'Scheme' with all letters lowercased.
-instance ConvertSuccess Scheme CIAscii where
-    {-# INLINE convertSuccess #-}
-    convertSuccess = foldCase ∘ unScheme
-
--- |Create an 'AsciiBuilder' from 'Scheme' with all letters
+-- |Create a 'Builder' from 'Scheme' with all letters
 -- lowercased.
-instance ConvertSuccess Scheme AsciiBuilder where
-    {-# INLINE convertSuccess #-}
-    convertSuccess = convertSuccessVia ((⊥) ∷ CIAscii)
+toBuilder ∷ Scheme → Builder
+{-# INLINE toBuilder #-}
+toBuilder = BB.fromByteString  ∘
+            toLegacyByteString ∘
+            foldedCase         ∘
+            unScheme
 
--- |Try to parse a 'Scheme' from 'CIAscii'.
-instance ConvertAttempt CIAscii Scheme where
-    {-# INLINE convertAttempt #-}
-    convertAttempt = parseAttempt' def ∘ cs
-
-deriveAttempts [ ([t| Scheme |], [t| AsciiBuilder |])
-               , ([t| Scheme |], [t| CIAscii      |])
-               ]
+-- |Try to parse a 'Scheme' from ascii string.
+fromByteString ∷ Failure String f ⇒ ByteString → f Scheme
+{-# INLINE fromByteString #-}
+fromByteString = either failure return ∘
+                 parseOnly parser      ∘
+                 toLegacyByteString
 
 #if defined(MIN_VERSION_QuickCheck)
 instance Arbitrary Scheme where
@@ -116,16 +113,14 @@ instance Arbitrary Scheme where
           x        = genAlpha
           xs       = listOf $ oneof [genAlpha, genDigit, genSym]
 
-    shrink = (fromString <$>) ∘ shr ∘ cs ∘ unScheme
+    shrink = (fromString <$>) ∘ shr ∘ show ∘ unScheme
         where
+          -- Make sure not to produce empty strings.
           shr ∷ [Char] → [String]
           shr []       = error "internal error"
           shr (_:[])   = []
           shr (x:y:ys) = (x:ys) : ((x:) <$> shr (y:ys))
 
 instance CoArbitrary Scheme where
-    coarbitrary = coarbitrary ∘ toString ∘ unScheme
-        where
-          toString ∷ CIAscii → String
-          toString = cs
+    coarbitrary = coarbitrary ∘ show ∘ unScheme
 #endif

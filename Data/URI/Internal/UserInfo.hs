@@ -1,51 +1,50 @@
 {-# LANGUAGE
     CPP
   , DeriveDataTypeable
+  , FlexibleContexts
   , FlexibleInstances
   , GeneralizedNewtypeDeriving
-  , MultiParamTypeClasses
   , StandaloneDeriving
-  , TemplateHaskell
-  , TypeSynonymInstances
   , UnicodeSyntax
   #-}
 module Data.URI.Internal.UserInfo
     ( UserInfo
+    , parser
+    , fromByteString
+    , toBuilder
     )
     where
+import Blaze.ByteString.Builder (Builder)
+import qualified Blaze.ByteString.Builder.ByteString as BB
 import Control.Applicative
+import Control.Failure
+import Codec.URI.PercentEncoding (DelimitedByteString)
 import qualified Codec.URI.PercentEncoding as PE
-import Data.Ascii (Ascii, AsciiBuilder)
-import qualified Data.Ascii as A
 import Data.Attoparsec.Char8
-import Data.ByteString.Char8 (ByteString)
-import Data.Convertible.Base
-import Data.Convertible.Instances.Ascii ()
 import Data.Data
-import Data.Default
 import Data.Hashable
 import Data.Monoid
 import Data.Monoid.Unicode
 import Data.Semigroup
 import Data.String
 import Data.URI.Internal
+import Data.Vector.Storable.ByteString (ByteString)
+import qualified Data.Vector.Storable.ByteString.Char8 as C8
+import Data.Vector.Storable.ByteString.Legacy
 import Prelude hiding (takeWhile)
 import Prelude.Unicode
 #if defined(MIN_VERSION_QuickCheck)
 import Test.QuickCheck.Arbitrary
-import Test.QuickCheck.Instances ()
 #endif
 
 -- |The userinfo subcomponent may consist of a user name and,
 -- optionally, scheme-specific information about how to gain
 -- authorization to access the resource. See:
 -- <http://tools.ietf.org/html/rfc3986#section-3.2.1>
-newtype UserInfo = UserInfo ByteString
-    deriving ( Data
-             , Eq
+newtype UserInfo = UserInfo { unUserInfo ∷ DelimitedByteString }
+    deriving ( Eq
              , Hashable
              , Ord
-             , Show
              , Typeable
              , Monoid
 #if defined(MIN_VERSION_QuickCheck)
@@ -53,6 +52,10 @@ newtype UserInfo = UserInfo ByteString
              , CoArbitrary
 #endif
              )
+
+-- |For testing purpose only.
+instance Show UserInfo where
+    show = C8.unpack ∘ PE.encode ((¬) ∘ isSafeInUserInfo) ∘ unUserInfo
 
 -- |'fromString' is a fast but unsafe way to create 'UserInfo' such
 -- that no validation on the string is performed.
@@ -64,44 +67,38 @@ instance Semigroup UserInfo where
 
 -- |'Parser' for 'UserInfo' which may fail after consuming arbitrary
 -- number of input letters.
-instance Default (Parser UserInfo) where
-    {-# INLINEABLE def #-}
-    def = do src ← takeWhile $ \c → isAllowedInUserInfo c ∨ isPctEncoded c
-             case PE.decode $ A.unsafeFromByteString src of
-               Right dst → pure $ UserInfo dst
-               Left  e   → fail $ show (e ∷ PE.DecodingFailed)
-          <?>
-          "userinfo"
+parser ∷ Parser UserInfo
+{-# INLINEABLE parser #-}
+parser = do src ← takeWhile isAllowedInUserInfo
+            case PE.decode (≡ ':') (fromLegacyByteString src) of
+              Right dst → pure $ UserInfo dst
+              Left  e   → fail $ show (e ∷ PE.DecodeError)
+         <?>
+         "userinfo"
+
+isSafeInUserInfo ∷ Char → Bool
+{-# INLINE isSafeInUserInfo #-}
+isSafeInUserInfo c = isUnreserved c ∨ isSubDelim c
 
 isAllowedInUserInfo ∷ Char → Bool
+{-# INLINE isAllowedInUserInfo #-}
 isAllowedInUserInfo c
     = isUnreserved c ∨
+      isPctEncoded c ∨
       isSubDelim   c ∨
       ':' ≡        c
 
--- |Extract a 'ByteString' from 'UserInfo'.
-instance ConvertSuccess UserInfo ByteString where
-    {-# INLINE convertSuccess #-}
-    convertSuccess (UserInfo ui) = ui
+-- |Create a 'Builder' from 'UserInfo'.
+toBuilder ∷ UserInfo → Builder
+{-# INLINE toBuilder #-}
+toBuilder = BB.fromByteString                  ∘
+            toLegacyByteString                 ∘
+            PE.encode ((¬) ∘ isSafeInUserInfo) ∘
+            unUserInfo
 
--- |Create an 'AsciiBuilder' from 'UserInfo' with all unsafe letters
--- percent-encoded.
-instance ConvertSuccess UserInfo AsciiBuilder where
-    {-# INLINE convertSuccess #-}
-    convertSuccess = cs ∘ PE.encode ((¬) ∘ isAllowedInUserInfo) ∘ cs
-
--- |Create an 'UserInfo' from any 'ByteString's.
-instance ConvertSuccess ByteString UserInfo where
-    {-# INLINE CONLIKE convertSuccess #-}
-    convertSuccess = UserInfo
-
--- |Try to parse an 'UserInfo' from 'Ascii' with decoding all
--- percent-encoded octets.
-instance ConvertAttempt Ascii UserInfo where
-    {-# INLINE convertAttempt #-}
-    convertAttempt = parseAttempt' def
-
-deriveAttempts [ ([t| ByteString |], [t| UserInfo     |])
-               , ([t| UserInfo   |], [t| AsciiBuilder |])
-               , ([t| UserInfo   |], [t| ByteString   |])
-               ]
+-- |Try to parse an 'UserInfo' from ascii string.
+fromByteString ∷ Failure String f ⇒ ByteString → f UserInfo
+{-# INLINE fromByteString #-}
+fromByteString = either failure return ∘
+                 parseOnly parser      ∘
+                 toLegacyByteString

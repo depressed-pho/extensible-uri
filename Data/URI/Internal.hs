@@ -1,6 +1,9 @@
 {-# LANGUAGE
-    UnicodeSyntax
+    ScopedTypeVariables
+  , TypeSynonymInstances
+  , UnicodeSyntax
   #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Data.URI.Internal
     ( isUnreserved
     , isPctEncoded
@@ -8,21 +11,24 @@ module Data.URI.Internal
     , isSubDelim
 
     , finishOff
-    , parseAttempt
-    , parseAttempt'
     )
     where
 import Control.Applicative
-import Control.Exception.Base
+import Control.Monad
+import Control.Monad.Primitive
 import Control.Monad.Unicode
-import Data.Ascii (Ascii)
-import Data.Attempt
 import qualified Data.Attoparsec as B
 import Data.Attoparsec.Char8
-import Data.ByteString (ByteString)
-import Data.Convertible.Base
-import Data.Convertible.Instances.Ascii ()
+import Data.CaseInsensitive
+import Data.Char
+import Data.Hashable
+import Data.Vector.Fusion.Util
+import qualified Data.Vector.Storable as SV
+import Data.Vector.Storable.ByteString.Char8 (ByteString)
+import qualified Data.Vector.Storable.ByteString.Char8 as C8
 import Data.Word
+import Foreign.ForeignPtr
+import Foreign.Storable
 import Prelude.Unicode
 
 isUnreserved ∷ Char → Bool
@@ -45,17 +51,27 @@ finishOff ∷ Parser α → Parser α
 {-# INLINE finishOff #-}
 finishOff = ((endOfInput *>) ∘ return =≪)
 
-parseAttempt ∷ Exception e
-             ⇒ (String → e)
-             → Parser α
-             → ByteString
-             → Attempt α
-{-# INLINEABLE parseAttempt #-}
-parseAttempt f p bs
-    = case parseOnly (finishOff p) bs of
-        Right α → Success α
-        Left  e → Failure $ f e
+-- FIXME: Remove this when the vector starts providing Hashable
+-- instances.
+instance (Hashable α, Storable α) ⇒ Hashable (SV.Vector α) where
+    {-# INLINE hashWithSalt #-}
+    hashWithSalt salt sv = unsafeInlineIO $
+                           withForeignPtr fp $ \p →
+                           hashPtrWithSalt p (fromIntegral len) salt
+        where
+          (fp, n) = SV.unsafeToForeignPtr0 sv
+          len     = n ⋅ sizeOf ((⊥) ∷ α)
 
-parseAttempt' ∷ Parser α → Ascii → Attempt α
-{-# INLINE parseAttempt' #-}
-parseAttempt' = (∘ cs) ∘ parseAttempt StringException
+-- FIXME: Remove this when the vector-bytestring starts providing
+-- FoldCase instances.
+instance FoldCase ByteString where
+    {-# INLINE foldCase #-}
+    foldCase = C8.map toLower
+
+-- FIXME: Remove this when the Id starts providing Applicative
+-- instances.
+instance Applicative Id where
+    {-# INLINE pure #-}
+    pure = return
+    {-# INLINE (<*>) #-}
+    (<*>) = ap

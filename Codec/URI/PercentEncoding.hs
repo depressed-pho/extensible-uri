@@ -1,164 +1,233 @@
 {-# LANGUAGE
-    FlexibleContexts
+    CPP
+  , DeriveDataTypeable
+  , FlexibleContexts
+  , FlexibleInstances
+  , MultiParamTypeClasses
   , ScopedTypeVariables
+  , TypeFamilies
   , UnicodeSyntax
+  , ViewPatterns
   #-}
 -- |Fast percent-encoding and decoding for ByteStrings.
 module Codec.URI.PercentEncoding
     ( DelimitableOctet(..)
     , DelimitedByteString
-
+    , DecodeError(..)
     , encode
     , decode
-
-    , DecodingFailed
     )
     where
 import Control.Applicative
-import Control.Monad.Failure.Transformers
-import Control.Monad.Base
-import Control.Monad.Trans.Control
-import Control.Monad.Trans.Error
-import Data.Ascii (Ascii)
-import qualified Data.Ascii as A
+import Control.Exception.Base
+import Control.Failure
+import Control.Monad
 import Data.Bits
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Unsafe as BS
-import qualified Data.ByteString.Internal as BS
-import Data.Convertible.Base
-import Data.Convertible.Instances.Ascii ()
+import Data.ByteString.Internal (w2c)
+import Data.Hashable
 import Data.Monoid.Unicode
-import qualified Data.Vector.Storable as SV
+import Data.String
+import Data.Typeable
+import Data.Vector.Storable.ByteString (ByteString)
+import qualified Data.Vector.Storable.ByteString.Char8 as C8
+import qualified Data.Vector.Generic as GV
+import qualified Data.Vector.Generic.Mutable as MV
+import qualified Data.Vector.Unboxed as UV
+import qualified Data.Vector.Fusion.Stream as PS
 import Data.Vector.Fusion.Stream.Monadic
 import Data.Vector.Fusion.Stream.Size
 import Data.URI.Internal
 import Data.Word
-import Foreign.ForeignPtr (ForeignPtr)
-import qualified Foreign.ForeignPtr as FP
-import Foreign.Ptr
-import Foreign.Storable (Storable)
-import qualified Foreign.Storable as S
-import System.IO.Unsafe
 import Prelude.Unicode
+#if defined(MIN_VERSION_QuickCheck)
+import Test.QuickCheck.Arbitrary
+#endif
 
 -- |FIXME: docs
 data DelimitableOctet
     = Delimiting !Word8
     | Literal    !Word8
+    deriving (Eq, Ord)
+
+instance Hashable DelimitableOctet where
+    hash (marshal → (isDelim, w))
+        = hash isDelim `hashWithSalt` hash w
+
+#if defined(MIN_VERSION_QuickCheck)
+instance Arbitrary DelimitableOctet where
+    arbitrary =  unmarshal <$> arbitrary
+    shrink    = (unmarshal <$>) ∘ shrink ∘ marshal
+
+instance CoArbitrary DelimitableOctet where
+    coarbitrary = coarbitrary ∘ marshal
+#endif
+
+newtype instance UV.MVector s DelimitableOctet
+    = MV_DelimitableOctet (UV.MVector s (Bool, Word8))
+newtype instance UV.Vector    DelimitableOctet
+    = V_DelimitableOctet  (UV.Vector    (Bool, Word8))
+
+marshal ∷ DelimitableOctet → (Bool, Word8)
+{-# INLINE marshal #-}
+marshal (Delimiting w) = (True , w)
+marshal (Literal    w) = (False, w)
+
+unmarshal ∷ (Bool, Word8) → DelimitableOctet
+{-# INLINE unmarshal #-}
+unmarshal (True , w) = Delimiting w
+unmarshal (False, w) = Literal    w
+
+instance MV.MVector UV.MVector DelimitableOctet where
+    {-# INLINE basicLength #-}
+    basicLength (MV_DelimitableOctet v) = MV.basicLength v
+    {-# INLINE basicUnsafeSlice #-}
+    basicUnsafeSlice i n (MV_DelimitableOctet v)
+        = MV_DelimitableOctet $ MV.basicUnsafeSlice i n v
+    {-# INLINE basicOverlaps #-}
+    basicOverlaps (MV_DelimitableOctet v1) (MV_DelimitableOctet v2)
+        = MV.basicOverlaps v1 v2
+    {-# INLINE basicUnsafeNew #-}
+    basicUnsafeNew n = MV_DelimitableOctet `liftM` MV.basicUnsafeNew n
+    {-# INLINE basicUnsafeReplicate #-}
+    basicUnsafeReplicate n
+        = (MV_DelimitableOctet `liftM`) ∘ MV.basicUnsafeReplicate n ∘ marshal
+    {-# INLINE basicUnsafeRead #-}
+    basicUnsafeRead (MV_DelimitableOctet v) i
+        = unmarshal `liftM` MV.basicUnsafeRead v i
+    {-# INLINE basicUnsafeWrite #-}
+    basicUnsafeWrite (MV_DelimitableOctet v) i
+        = MV.basicUnsafeWrite v i ∘ marshal
+    {-# INLINE basicClear #-}
+    basicClear (MV_DelimitableOctet v) = MV.basicClear v
+    {-# INLINE basicSet #-}
+    basicSet (MV_DelimitableOctet v) = MV.basicSet v ∘ marshal
+    {-# INLINE basicUnsafeCopy #-}
+    basicUnsafeCopy (MV_DelimitableOctet v1) (MV_DelimitableOctet v2)
+        = MV.basicUnsafeCopy v1 v2
+    {-# INLINE basicUnsafeMove #-}
+    basicUnsafeMove (MV_DelimitableOctet v1) (MV_DelimitableOctet v2)
+        = MV.basicUnsafeMove v1 v2
+    {-# INLINE basicUnsafeGrow #-}
+    basicUnsafeGrow (MV_DelimitableOctet v) n
+        = MV_DelimitableOctet `liftM` MV.basicUnsafeGrow v n
+
+instance GV.Vector UV.Vector DelimitableOctet where
+    {-# INLINE basicUnsafeFreeze #-}
+    basicUnsafeFreeze (MV_DelimitableOctet v)
+        = V_DelimitableOctet `liftM` GV.basicUnsafeFreeze v
+    {-# INLINE basicUnsafeThaw #-}
+    basicUnsafeThaw (V_DelimitableOctet v)
+        = MV_DelimitableOctet `liftM` GV.basicUnsafeThaw v
+    {-# INLINE basicLength #-}
+    basicLength (V_DelimitableOctet v) = GV.basicLength v
+    {-# INLINE basicUnsafeSlice #-}
+    basicUnsafeSlice i n (V_DelimitableOctet v)
+        = V_DelimitableOctet $ GV.basicUnsafeSlice i n v
+    {-# INLINE basicUnsafeIndexM #-}
+    basicUnsafeIndexM (V_DelimitableOctet v) i
+        = unmarshal `liftM` GV.basicUnsafeIndexM v i
+    {-# INLINE basicUnsafeCopy #-}
+    basicUnsafeCopy (MV_DelimitableOctet mv) (V_DelimitableOctet v)
+        = GV.basicUnsafeCopy mv v
+    {-# INLINE elemseq #-}
+    elemseq _ o z
+        = case marshal o of
+            (isDelim, w) → GV.elemseq ((⊥) ∷ UV.Vector Bool ) isDelim $
+                           GV.elemseq ((⊥) ∷ UV.Vector Word8) w z
+
+instance UV.Unbox DelimitableOctet
+
+-- |Decode every percent-encoded octets and turn every letters to
+-- 'Literal's. Throws a runtime exception for 'DecodeError's.
+instance IsString (UV.Vector DelimitableOctet) where
+    {-# INLINE fromString #-}
+    fromString str
+        = case decode (const False) (C8.pack str) of
+            Right v → v
+            Left  e → throw (e ∷ DecodeError)
+
+instance Hashable (UV.Vector DelimitableOctet) where
+    {-# INLINE hashWithSalt #-}
+    hashWithSalt = UV.foldl' hashWithSalt
+
+#if defined(MIN_VERSION_QuickCheck)
+instance Arbitrary (UV.Vector DelimitableOctet) where
+    arbitrary =  UV.fromList <$> arbitrary
+    shrink    = (UV.fromList <$>) ∘ shrink ∘ UV.toList
+
+instance CoArbitrary (UV.Vector DelimitableOctet) where
+    coarbitrary = coarbitrary ∘ UV.toList
+#endif
 
 -- |FIXME: doc
 type DelimitedByteString
-    = SV.Vector DelimitableOctet
+    = UV.Vector DelimitableOctet
 
-data EncState = EInitial
-              | EPercent   !Word8 !Word8 -- upper and lower halves
-              | EUpperHalf !Word8        -- lower half
+data EncState s
+    = EInitial   !s
+    | EPercent   !s !Word8 !Word8 -- ^upper and lower halves
+    | EUpperHalf !s !Word8        -- ^lower half
 
-data DecState = DInitial
-              | DPercent
-              | DUpperHalf !Word8        -- upper half
+data DecState s
+    = DInitial   !s
+    | DPercent   !s
+    | DUpperHalf !s !Word8 -- ^upper half
 
--- |Data type to represent a failure of decoding percent-encoded
+-- |Data type to represent a decoding error of percent-encoded
 -- strings.
-data DecodingFailed = DecodingFailed !(Maybe String)
+data DecodeError
+    = InvalidUpperHalf !Char
+    | InvalidLowerHalf !Char !Char
+    | MissingUpperHalf
+    | MissingLowerHalf !Char
+    deriving Typeable
 
-instance Error DecodingFailed where
-    {-# INLINE CONLIKE noMsg #-}
-    noMsg = DecodingFailed Nothing
-    {-# INLINE CONLIKE strMsg #-}
-    strMsg = DecodingFailed ∘ Just
+instance Exception DecodeError
 
-instance Show DecodingFailed where
-    show (DecodingFailed Nothing)
-        = "DecodingFailed"
-    show (DecodingFailed (Just msg))
-        = "DecodingFailed: " ⊕ msg
+instance Show DecodeError where
+    show (InvalidUpperHalf u)
+        = "DecodeError: non-hex-digit occured after \"%\": '" ⊕ [u] ⊕ "'"
+    show (InvalidLowerHalf u l)
+        = "DecodeError: non-hex-digit occured after \"%" ⊕ [u] ⊕ "\": '" ⊕ [l] ⊕ "'"
+    show MissingUpperHalf
+        = "DecodeError: premature end with \"%\""
+    show (MissingLowerHalf u)
+        = "DecodeError: premature end with \"%" ⊕ [u] ⊕ "\""
 
-
--- |Percent-encode a 'ByteString' to 'Ascii' using a predicate to
--- determine which letters are to be encoded.
-encode ∷ (Char → Bool) → ByteString → Ascii
+-- |Encode a 'DelimitedByteString' to percent-encoded ascii string
+-- using a predicate to determine which literal letters should be
+-- encoded. Note that 'Delimiting' letters are always passed through.
+encode ∷ (Char → Bool) → DelimitedByteString → ByteString
 {-# INLINE encode #-}
-encode f = A.unsafeFromByteString ∘ encodeInIO
-    where
-      encodeInIO ∷ ByteString → ByteString
-      {-# INLINE encodeInIO #-}
-      encodeInIO
-          = unsafePerformIO ∘ unstreamBS ∘ encodeStream g ∘ streamBS
+encode isUnsafe = GV.unstream ∘ encodeStream isUnsafe ∘ GV.stream
 
-      g ∷ Word8 → Bool
-      g = f ∘ A.toChar
-
--- |Decode a percent-encoded 'Ascii' string to a 'ByteString'.
-decode ∷ ∀f. (Applicative f, Failure DecodingFailed f) ⇒ Ascii → f ByteString
+-- |Decode a percent-encoded ascii string to 'DelimitedByteString'
+-- using a predicate to determine which non-encoded letters should be
+-- considered to be delimiters. Note that encoded letters are always
+-- considered to be literal.
+decode ∷ ∀f. (Applicative f, Failure DecodeError f)
+       ⇒ (Char → Bool)
+       → ByteString
+       → f DelimitedByteString
 {-# INLINE decode #-}
-decode = decodeInIO ∘ cs
-    where
-      decodeInIO ∷ ByteString → f ByteString
-      {-# INLINE decodeInIO #-}
-      decodeInIO src
-          = unsafePerformIO $
-            do r ← runErrorT $ decodeInErrorT src
-               case r of
-                 Right dst → pure $ pure dst
-                 Left  e   → pure $ failure e
+decode isDelim = munstream ∘ decodeStream isDelim ∘ mstream
 
-      decodeInErrorT ∷ ByteString → ErrorT DecodingFailed IO ByteString
-      {-# INLINE decodeInErrorT #-}
-      decodeInErrorT = unstreamBS ∘ decodeStream ∘ streamBS
+mstream ∷ (Monad m, GV.Vector v α) ⇒ v α → Stream m α
+{-# INLINE mstream #-}
+mstream = PS.liftStream ∘ GV.stream
 
-streamBS ∷ ∀f. Applicative f ⇒ ByteString → Stream f Word8
-{-# INLINE streamBS #-}
-streamBS bs = Stream go 0 (Exact len)
-    where
-      len ∷ Int
-      {-# INLINE CONLIKE len #-}
-      len = BS.length bs
+-- This is terrible, but what else can we do...?
+munstream ∷ (Functor m, Monad m, GV.Vector v α) ⇒ Stream m α → m (v α)
+{-# INLINE munstream #-}
+munstream s = GV.unstream ∘ PS.unsafeFromList (size s) <$> toList s
 
-      go ∷ Int → f (Step Int Word8)
-      {-# INLINE go #-}
-      go n | n ≥ len   = pure Done
-           | otherwise = pure $ Yield (BS.unsafeIndex bs n) (n + 1)
-
-unstreamBS ∷ ∀m. MonadBaseControl IO m ⇒ Stream m Word8 → m ByteString
-{-# INLINE unstreamBS #-}
-unstreamBS (Stream step (s0 ∷ s) sz)
-    = case upperBound sz of
-        Just n  → unstreamWithMaxLen n
-        Nothing → fail "unstreamBS: stream with an unknown size is not currently supported"
-    where
-      unstreamWithMaxLen ∷ Int → m ByteString
-      {-# INLINE unstreamWithMaxLen #-}
-      unstreamWithMaxLen n
-          = do fpOut ← mallocByteString n
-               withForeignPtr fpOut $ \pOut →
-                 do nWrote ← go 0 pOut s0
-                    let out = BS.fromForeignPtr fpOut 0 nWrote
-                    if nWrote ≡ n then
-                        pure out
-                    else
-                        pure $ BS.copy out
-
-      go ∷ Int → Ptr Word8 → s → m Int
-      {-# INLINE go #-}
-      go nWrote pOut s
-          = do r ← step s
-               case r of
-                 Yield w s' → poke pOut w *>
-                              go (nWrote + 1) (pOut `plusPtr` 1) s'
-                 Skip    s' → go nWrote pOut s'
-                 Done       → pure nWrote
-
-encodeStream ∷ ∀f. ( Applicative f
-                   , Monad f
-                   )
-             ⇒ (Word8 → Bool)
-             → Stream f Word8
+encodeStream ∷ ∀f. (Applicative f, Monad f)
+             ⇒ (Char → Bool)
+             → Stream f DelimitableOctet
              → Stream f Word8
 {-# INLINE encodeStream #-}
 encodeStream isUnsafe (Stream step (s0 ∷ s) sz)
-    = Stream (uncurry go) (EInitial, s0) sz'
+    = Stream go (EInitial s0) sz'
     where
       sz' ∷ Size
       {-# INLINE sz' #-}
@@ -166,64 +235,57 @@ encodeStream isUnsafe (Stream step (s0 ∷ s) sz)
               Just n  → Max $ n ⋅ 3
               Nothing → Unknown
 
-      go ∷ EncState → s → f (Step (EncState, s) Word8)
+      go ∷ EncState s → f (Step (EncState s) Word8)
       {-# INLINE go #-}
-      go EInitial s
+      go (EInitial s)
+          = do r ← step s
+               case r of
+                 Yield (Delimiting w) s'
+                          → pure $ Yield w    (EInitial s'    )
+                 Yield (Literal    w) s'
+                     | isUnsafe (w2c w)
+                          → let (u, l) = encodeHex w in
+                            pure $ Yield 0x25 (EPercent s' u l)
+                     | otherwise
+                          → pure $ Yield w    (EInitial s'    )
+                 Skip s'  → pure $ Skip       (EInitial s'    )
+                 Done     → pure $ Done
+      go (EPercent s u l) = pure $ Yield u (EUpperHalf s l)
+      go (EUpperHalf s l) = pure $ Yield l (EInitial   s  )
+
+decodeStream ∷ ∀f. (Applicative f, Failure DecodeError f)
+             ⇒ (Char → Bool)
+             → Stream f Word8
+             → Stream f DelimitableOctet
+{-# INLINE decodeStream #-}
+decodeStream isDelim (Stream step (s0 ∷ s) sz)
+    = Stream go (DInitial s0) (toMax sz)
+    where
+      go ∷ DecState s → f (Step (DecState s) DelimitableOctet)
+      {-# INLINE go #-}
+      go (DInitial s)
           = do r ← step s
                case r of
                  Yield w s'
-                     | isUnsafe w → let (u, l) = encodeHex w
-                                    in pure $ Yield 0x25 (EPercent u l, s')
-                     | otherwise  → pure $ Yield w (EInitial, s')
-                 Skip    s'       → pure $ Skip    (EInitial, s')
-                 Done             → pure $ Done
-      go (EPercent u l) s         = pure $ Yield u (EUpperHalf l, s)
-      go (EUpperHalf l) s         = pure $ Yield l (EInitial    , s)
-
-decodeStream ∷ ∀f. ( Applicative f
-                   , Failure DecodingFailed f
-                   )
-             ⇒ Stream f Word8
-             → Stream f Word8
-{-# INLINE decodeStream #-}
-decodeStream (Stream step (s0 ∷ s) sz)
-    = Stream (uncurry go) (DInitial, s0) sz'
-    where
-      sz' ∷ Size
-      {-# INLINE sz' #-}
-      sz' = toMax sz
-
-      go ∷ DecState → s → f (Step (DecState, s) Word8)
-      {-# INLINE go #-}
-      go ds s
+                     | w ≡ 0x25        → pure $ Skip                 (DPercent s')
+                     | isDelim (w2c w) → pure $ Yield (Delimiting w) (DInitial s')
+                     | otherwise       → pure $ Yield (Literal    w) (DInitial s')
+                 Skip    s'            → pure $ Skip              (DInitial s')
+                 Done                  → pure Done
+      go (DPercent s)
           = do r ← step s
                case r of
-                 Yield w s' → gotOctet ds s' w
-                 Skip    s' → pure $ Skip (ds, s')
-                 Done       → gotEOF ds
-
-      gotOctet ∷ DecState → s → Word8 → f (Step (DecState, s) Word8)
-      {-# INLINE gotOctet #-}
-      gotOctet DInitial s 0x25 = pure $ Skip    (DPercent, s) -- '%'
-      gotOctet DInitial s w    = pure $ Yield w (DInitial, s) -- unencoded
-      gotOctet DPercent s u
-          | isHexDigit_w8 u    = pure $ Skip (DUpperHalf u, s)
-          | otherwise          = let e ∷ DecodingFailed
-                                     e = strMsg "non-hex-digit occured at the upper half of %xx"
-                                 in failure e
-      gotOctet (DUpperHalf u) s l
-          | isHexDigit_w8 l    = let w = unsafeDecodeHex u l
-                                 in pure $ Yield w (DInitial, s)
-          | otherwise          = let e ∷ DecodingFailed
-                                     e = strMsg "non-hex-digit occured at the lower half of %xx"
-                                 in failure e
-
-      gotEOF ∷ DecState → f (Step σ Word8)
-      {-# INLINE gotEOF #-}
-      gotEOF DInitial = pure Done
-      gotEOF _        = let e ∷ DecodingFailed
-                            e = strMsg "premature end of percent-encoded string"
-                        in failure e
+                 Yield u s' → pure $ Skip (DUpperHalf s' u)
+                 Skip    s' → pure $ Skip (DPercent   s'  )
+                 Done       → pure Done
+      go (DUpperHalf s u)
+          = do r ← step s
+               case r of
+                 Yield l s' → do w ← decodeHex u l
+                                 -- Encoded octets are always literal.
+                                 pure $ Yield (Literal w) (DInitial s')
+                 Skip    s' → pure    $ Skip (DUpperHalf s' u)
+                 Done       → failure $ MissingLowerHalf (w2c u)
 
 encodeHex ∷ Word8 → (Word8, Word8)
 {-# INLINEABLE encodeHex #-}
@@ -237,6 +299,13 @@ encodeHex w = ( encodeHalf $ w `shiftR` 4
           | h < 0x0A  = h      + 0x30 -- '0'..'9'
           | otherwise = h - 10 + 0x65 -- 'A'..'F'
 
+decodeHex ∷ (Applicative f, Failure DecodeError f) ⇒ Word8 → Word8 → f Word8
+{-# INLINEABLE decodeHex #-}
+decodeHex u l
+    | (¬) (isHexDigit_w8 u) = failure $ InvalidUpperHalf (w2c u)
+    | (¬) (isHexDigit_w8 l) = failure $ InvalidLowerHalf (w2c u) (w2c l)
+    | otherwise             = pure    $ unsafeDecodeHex u l
+
 unsafeDecodeHex ∷ Word8 → Word8 → Word8
 {-# INLINEABLE unsafeDecodeHex #-}
 unsafeDecodeHex u l = (decodeHalf u `shiftL` 4) .|. decodeHalf l
@@ -247,21 +316,3 @@ unsafeDecodeHex u l = (decodeHalf u `shiftL` 4) .|. decodeHalf l
           | w ≥ 0x30 ∧ w ≤ 0x39 = w - 0x30      -- '0'..'9'
           | w ≥ 0x61            = w - 0x61 + 10 -- 'a'..'f'
           | otherwise           = w - 0x65 + 10 -- 'A'..'F'
-
-mallocByteString ∷ MonadBase IO m ⇒ Int → m (ForeignPtr Word8)
-{-# INLINE mallocByteString #-}
-mallocByteString = liftBase ∘ BS.mallocByteString
-
-withForeignPtr ∷ MonadBaseControl IO m
-               ⇒ ForeignPtr α
-               → (Ptr α → m β)
-               → m β
-{-# INLINE withForeignPtr #-}
-withForeignPtr fp f
-    = control $ \runInIO →
-        FP.withForeignPtr fp $ \p →
-          runInIO $ f p
-
-poke ∷ (MonadBaseControl IO m, Storable α) ⇒ Ptr α → α → m ()
-{-# INLINE poke #-}
-poke = (liftBase ∘) ∘ S.poke
