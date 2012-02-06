@@ -45,8 +45,8 @@ import Test.QuickCheck.Arbitrary
 
 -- |FIXME: docs
 data DelimitableOctet
-    = Delimiting !Word8
-    | Literal    !Word8
+    = Delimiter !Word8
+    | Literal   !Word8
     deriving (Eq, Ord)
 
 instance Hashable DelimitableOctet where
@@ -69,13 +69,13 @@ newtype instance UV.Vector    DelimitableOctet
 
 marshal ∷ DelimitableOctet → (Bool, Word8)
 {-# INLINE marshal #-}
-marshal (Delimiting w) = (True , w)
-marshal (Literal    w) = (False, w)
+marshal (Delimiter w) = (True , w)
+marshal (Literal   w) = (False, w)
 
 unmarshal ∷ (Bool, Word8) → DelimitableOctet
 {-# INLINE unmarshal #-}
-unmarshal (True , w) = Delimiting w
-unmarshal (False, w) = Literal    w
+unmarshal (True , w) = Delimiter w
+unmarshal (False, w) = Literal   w
 
 instance MV.MVector UV.MVector DelimitableOctet where
     {-# INLINE basicLength #-}
@@ -176,10 +176,10 @@ data DecState s
 -- |Data type to represent a decoding error of percent-encoded
 -- strings.
 data DecodeError
-    = InvalidUpperHalf !Char
-    | InvalidLowerHalf !Char !Char
+    = InvalidUpperHalf !Char       -- ^invalid upper half
+    | InvalidLowerHalf !Char !Char -- ^valid upper and invalid lower halves
     | MissingUpperHalf
-    | MissingLowerHalf !Char
+    | MissingLowerHalf !Char       -- ^valid upper half
     deriving Typeable
 
 instance Exception DecodeError
@@ -195,16 +195,16 @@ instance Show DecodeError where
         = "DecodeError: premature end with \"%" ⊕ [u] ⊕ "\""
 
 -- |Encode a 'DelimitedByteString' to percent-encoded ascii string
--- using a predicate to determine which literal letters should be
--- encoded. Note that 'Delimiting' letters are always passed through.
+-- using a predicate to determine which 'Literal's should be
+-- encoded. Note that 'Delimiter's are always passed through.
 encode ∷ (Char → Bool) → DelimitedByteString → ByteString
 {-# INLINE encode #-}
 encode isUnsafe = GV.unstream ∘ encodeStream isUnsafe ∘ GV.stream
 
 -- |Decode a percent-encoded ascii string to 'DelimitedByteString'
 -- using a predicate to determine which non-encoded letters should be
--- considered to be delimiters. Note that encoded letters are always
--- considered to be literal.
+-- considered to be delimiters. Note that encoded octets are always
+-- considered to be 'Literal'.
 decode ∷ ∀f. (Applicative f, Failure DecodeError f)
        ⇒ (Char → Bool)
        → ByteString
@@ -240,9 +240,9 @@ encodeStream isUnsafe (Stream step (s0 ∷ s) sz)
       go (EInitial s)
           = do r ← step s
                case r of
-                 Yield (Delimiting w) s'
+                 Yield (Delimiter w) s'
                           → pure $ Yield w    (EInitial s'    )
-                 Yield (Literal    w) s'
+                 Yield (Literal   w) s'
                      | isUnsafe (w2c w)
                           → let (u, l) = encodeHex w in
                             pure $ Yield 0x25 (EPercent s' u l)
@@ -267,10 +267,10 @@ decodeStream isDelim (Stream step (s0 ∷ s) sz)
           = do r ← step s
                case r of
                  Yield w s'
-                     | w ≡ 0x25        → pure $ Skip                 (DPercent s')
-                     | isDelim (w2c w) → pure $ Yield (Delimiting w) (DInitial s')
-                     | otherwise       → pure $ Yield (Literal    w) (DInitial s')
-                 Skip    s'            → pure $ Skip              (DInitial s')
+                     | w ≡ 0x25        → pure $ Skip                (DPercent s')
+                     | isDelim (w2c w) → pure $ Yield (Delimiter w) (DInitial s')
+                     | otherwise       → pure $ Yield (Literal   w) (DInitial s')
+                 Skip    s'            → pure $ Skip                (DInitial s')
                  Done                  → pure Done
       go (DPercent s)
           = do r ← step s
