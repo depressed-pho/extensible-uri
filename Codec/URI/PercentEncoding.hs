@@ -50,8 +50,8 @@ data DelimitableOctet
     deriving (Eq, Ord)
 
 instance Hashable DelimitableOctet where
-    hash (marshal → (isDelim, w))
-        = hash isDelim `hashWithSalt` hash w
+    hashWithSalt salt (marshal → (isDelim, w))
+        = hashWithSalt salt w `hashWithSalt` isDelim
 
 #if defined(MIN_VERSION_QuickCheck)
 instance Arbitrary DelimitableOctet where

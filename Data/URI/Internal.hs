@@ -1,6 +1,6 @@
 {-# LANGUAGE
-    ScopedTypeVariables
-  , TypeSynonymInstances
+    FlexibleInstances
+  , ScopedTypeVariables
   , UnicodeSyntax
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}

@@ -15,7 +15,7 @@ Stability:     experimental
 Homepage:      https://github.com/phonohawk/extensible-uri
 Bug-Reports:   https://github.com/phonohawk/extensible-uri/issues
 Category:      Data, Codec, Network
-Tested-With:   GHC == 7.0.3
+Tested-With:   GHC == 7.6.2
 Cabal-Version: >= 1.10
 Build-Type:    Simple
 
@@ -39,20 +39,20 @@ Library
 
     if flag(QuickCheck)
         Build-Depends:
-            QuickCheck == 2.4.*
+            QuickCheck == 2.5.*
 
     Build-Depends:
         attoparsec            == 0.10.*,
         base                  == 4.*,
         base-unicode-symbols  == 0.2.*,
         blaze-builder         == 0.3.*,
-        bytestring            == 0.9.*,
-        case-insensitive      == 0.4.*,
+        bytestring            == 0.10.*,
+        case-insensitive      == 1.0.*,
         failure               == 0.2.*,
-        hashable              == 1.1.*,
-        primitive             == 0.4.*,
-        semigroups            == 0.8.*,
-        vector                >= 0.9.1 && < 0.10,
+        hashable              == 1.2.*,
+        primitive             == 0.5.*,
+        semigroups            == 0.9.*,
+        vector                == 0.10.*,
         vector-bytestring     == 0.0.*
 
     Default-Language:
