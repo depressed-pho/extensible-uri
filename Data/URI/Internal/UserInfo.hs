@@ -88,7 +88,7 @@ isAllowedInUserInfo c
       isSubDelim   c ∨
       ':' ≡        c
 
--- |Create a 'Builder' from 'UserInfo'.
+-- |Create a 'Builder' from an 'UserInfo'.
 toBuilder ∷ UserInfo → Builder
 {-# INLINE toBuilder #-}
 toBuilder = BB.fromByteString                  ∘
@@ -96,7 +96,7 @@ toBuilder = BB.fromByteString                  ∘
             PE.encode ((¬) ∘ isSafeInUserInfo) ∘
             unUserInfo
 
--- |Try to parse an 'UserInfo' from ascii string.
+-- |Try to parse an 'UserInfo' from an ascii string.
 fromByteString ∷ Failure String f ⇒ ByteString → f UserInfo
 {-# INLINE fromByteString #-}
 fromByteString = either failure return ∘

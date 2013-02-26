@@ -72,7 +72,7 @@ parser ∷ Parser Scheme
 {-# INLINEABLE parser #-}
 parser = do x  ← satisfy first
             xs ← takeWhile nonFirst
-            -- FIXME: rewrite this
+            -- FIXME: rewrite this in an applicative style.
             return $ Scheme $ CI.mk $ x `C8.cons` fromLegacyByteString xs
          <?>
          "scheme"
@@ -87,8 +87,7 @@ parser = do x  ← satisfy first
             c ≡ '-'         ∨
             c ≡ '.'
 
--- |Create a 'Builder' from 'Scheme' with all letters
--- lowercased.
+-- |Create a 'Builder' from a 'Scheme' with all letters lowercased.
 toBuilder ∷ Scheme → Builder
 {-# INLINE toBuilder #-}
 toBuilder = BB.fromByteString  ∘
@@ -96,7 +95,7 @@ toBuilder = BB.fromByteString  ∘
             foldedCase         ∘
             unScheme
 
--- |Try to parse a 'Scheme' from ascii string.
+-- |Try to parse a 'Scheme' from an ascii string.
 fromByteString ∷ Failure String f ⇒ ByteString → f Scheme
 {-# INLINE fromByteString #-}
 fromByteString = either failure return ∘
