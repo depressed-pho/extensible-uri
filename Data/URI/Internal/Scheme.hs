@@ -71,9 +71,8 @@ instance Semigroup Scheme where
 parser ∷ Parser Scheme
 {-# INLINEABLE parser #-}
 parser = do x  ← satisfy first
-            xs ← takeWhile nonFirst
-            -- FIXME: rewrite this in an applicative style.
-            return $ Scheme $ CI.mk $ x `C8.cons` fromLegacyByteString xs
+            xs ← fromLegacyByteString <$> takeWhile nonFirst
+            pure ∘ Scheme ∘ CI.mk $ x `C8.cons` xs
          <?>
          "scheme"
     where
