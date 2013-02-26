@@ -3,8 +3,8 @@
   , DeriveDataTypeable
   , FlexibleContexts
   , GeneralizedNewtypeDeriving
-  , StandaloneDeriving
   , UnicodeSyntax
+  , ViewPatterns
   #-}
 module Data.URI.Internal.Scheme
     ( Scheme
@@ -57,16 +57,21 @@ newtype Scheme = Scheme { unScheme ∷ CI ByteString }
 instance Show Scheme where
     show = C8.unpack ∘ foldedCase ∘ unScheme
 
--- |'fromString' is a fast but unsafe way to create 'Scheme' such that
--- no validation on the string is performed.
-deriving instance IsString Scheme
-
 -- |'Scheme's form a 'Semigroup' with string concatenation as the
 -- operation. Since 'Scheme's can not be empty, they don't form a
 -- 'Monoid'.
 instance Semigroup Scheme where
     {-# INLINE (<>) #-}
     Scheme a <> Scheme b = Scheme (a ⊕ b)
+
+-- |'fromString' constructs a 'Scheme' from a 'String'. Throws a
+-- runtime exception for invalid schemes.
+instance IsString Scheme where
+    {-# INLINEABLE fromString #-}
+    fromString (toLegacyByteString ∘ C8.pack → str)
+        = case parseOnly parser str of
+            Right s → s
+            Left  e → error e
 
 -- |'Parser' for 'Scheme's which fails without consuming any input if
 -- the first letter is not an ASCII alphabet.

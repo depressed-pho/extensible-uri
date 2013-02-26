@@ -4,8 +4,8 @@
   , FlexibleContexts
   , FlexibleInstances
   , GeneralizedNewtypeDeriving
-  , StandaloneDeriving
   , UnicodeSyntax
+  , ViewPatterns
   #-}
 module Data.URI.Internal.UserInfo
     ( UserInfo
@@ -59,13 +59,18 @@ newtype UserInfo = UserInfo { unUserInfo ∷ DelimitedByteString }
 instance Show UserInfo where
     show = C8.unpack ∘ PE.encode ((¬) ∘ isSafeInUserInfo) ∘ unUserInfo
 
--- |'fromString' is a fast but unsafe way to create 'UserInfo' such
--- that no validation on the string is performed.
-deriving instance IsString UserInfo
-
 instance Semigroup UserInfo where
     {-# INLINE CONLIKE (<>) #-}
     (<>) = (⊕)
+
+-- |'fromString' constructs an 'UserInfo' from a 'String'. Throws a
+-- runtime exception for invalid userinfo.
+instance IsString UserInfo where
+    {-# INLINEABLE fromString #-}
+    fromString (toLegacyByteString ∘ C8.pack → str)
+        = case parseOnly parser str of
+            Right s → s
+            Left  e → error e
 
 -- |'Parser' for 'UserInfo' which may fail after consuming arbitrary
 -- number of input letters.

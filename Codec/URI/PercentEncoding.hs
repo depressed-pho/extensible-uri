@@ -143,7 +143,7 @@ instance UV.Unbox DelimitableOctet
 -- |Decode every percent-encoded octets and turn every letters to
 -- 'Literal's. Throws a runtime exception for 'DecodeError's.
 instance IsString (UV.Vector DelimitableOctet) where
-    {-# INLINE fromString #-}
+    {-# INLINEABLE fromString #-}
     fromString str
         = case decode (const False) (C8.pack str) of
             Right v → v
