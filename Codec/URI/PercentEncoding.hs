@@ -216,7 +216,7 @@ mstream ∷ (Monad m, GV.Vector v α) ⇒ v α → Stream m α
 {-# INLINE mstream #-}
 mstream = PS.liftStream ∘ GV.stream
 
--- This is terrible, but what else can we do...?
+-- THINKME: This is terrible, but what else can we do...?
 munstream ∷ (Functor m, Monad m, GV.Vector v α) ⇒ Stream m α → m (v α)
 {-# INLINE munstream #-}
 munstream s = GV.unstream ∘ PS.unsafeFromList (size s) <$> toList s
