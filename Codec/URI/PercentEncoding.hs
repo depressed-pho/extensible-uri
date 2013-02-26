@@ -51,7 +51,7 @@ data DelimitableOctet
 
 instance Hashable DelimitableOctet where
     hashWithSalt salt (marshal → (isDelim, w))
-        = hashWithSalt salt w `hashWithSalt` isDelim
+        = salt `hashWithSalt` isDelim `hashWithSalt` w
 
 #if defined(MIN_VERSION_QuickCheck)
 instance Arbitrary DelimitableOctet where

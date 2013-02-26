@@ -22,6 +22,7 @@ import Data.Attoparsec.Char8
 import Data.CaseInsensitive
 import Data.Char
 import Data.Hashable
+import Data.LargeWord (LargeKey(..))
 import Data.Vector.Fusion.Util
 import qualified Data.Vector.Storable as SV
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
@@ -62,6 +63,13 @@ instance (Hashable α, Storable α) ⇒ Hashable (SV.Vector α) where
           (fp, n) = SV.unsafeToForeignPtr0 sv
           len     = n ⋅ sizeOf ((⊥) ∷ α)
 
+-- FIXME: Remove this when the largeword starts providing Hashable
+-- instance.
+instance (Hashable α, Hashable β) ⇒ Hashable (LargeKey α β) where
+    {-# INLINE hashWithSalt #-}
+    hashWithSalt salt (LargeKey a b)
+        = salt `hashWithSalt` a `hashWithSalt` b
+
 -- FIXME: Remove this when the vector-bytestring starts providing
 -- FoldCase instances.
 instance FoldCase ByteString where
@@ -69,7 +77,7 @@ instance FoldCase ByteString where
     foldCase = C8.map toLower
 
 -- FIXME: Remove this when the Id starts providing Applicative
--- instances.
+-- instance.
 instance Applicative Id where
     {-# INLINE pure #-}
     pure = return

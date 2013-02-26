@@ -9,9 +9,11 @@ module Data.URI.Internal.Host
     where
 import Control.Applicative
 import Data.CaseInsensitive as CI
+import Data.Hashable
 import Data.LargeWord (Word128)
 import Data.Text (Text)
 import Data.Typeable
+import Data.URI.Internal ()
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
 import Data.Word (Word32)
 
@@ -33,8 +35,18 @@ data Host
     | RegName     !(CI Text)
     deriving (Eq, Ord, Typeable)
 
+
 instance FoldCase Host where
+    {-# INLINEABLE foldCase #-}
     foldCase (IPv4Address w  ) = IPv4Address w
     foldCase (IPv6Address w s) = IPv6Address w (foldCase <$> s)
     foldCase (IPvFuture   v a) = IPvFuture   v (foldCase a)
     foldCase (RegName     n  ) = RegName       (foldCase n)
+
+
+instance Hashable Host where
+    {-# INLINEABLE hashWithSalt #-}
+    hashWithSalt salt (IPv4Address w  ) = salt `hashWithSalt` w
+    hashWithSalt salt (IPv6Address w s) = salt `hashWithSalt` w `hashWithSalt` s
+    hashWithSalt salt (IPvFuture   v a) = salt `hashWithSalt` v `hashWithSalt` a
+    hashWithSalt salt (RegName     n  ) = salt `hashWithSalt` n
