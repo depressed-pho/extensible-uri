@@ -8,6 +8,7 @@ module Data.URI.Internal.Host
     )
     where
 import Control.Applicative
+import Control.DeepSeq
 import Data.CaseInsensitive as CI
 import Data.Hashable
 import Data.LargeWord (Word128)
@@ -50,3 +51,11 @@ instance Hashable Host where
     hashWithSalt salt (IPv6Address w s) = salt `hashWithSalt` w `hashWithSalt` s
     hashWithSalt salt (IPvFuture   v a) = salt `hashWithSalt` v `hashWithSalt` a
     hashWithSalt salt (RegName     n  ) = salt `hashWithSalt` n
+
+
+instance NFData Host where
+    {-# INLINEABLE rnf #-}
+    rnf (IPv4Address w  ) = rnf w
+    rnf (IPv6Address w s) = rnf w `seq` rnf s
+    rnf (IPvFuture   v a) = rnf v `seq` rnf a
+    rnf (RegName     n  ) = rnf n

@@ -19,6 +19,7 @@ import qualified Blaze.ByteString.Builder.ByteString as BB
 import Control.Applicative
 import Control.Applicative.Unicode
 #endif
+import Control.DeepSeq
 import Control.Failure
 import Data.Attoparsec.Char8
 import Data.CaseInsensitive as CI
@@ -47,6 +48,7 @@ newtype Scheme = Scheme { unScheme ∷ CI ByteString }
     deriving ( Eq
              , FoldCase
              , Hashable
+             , NFData
              , Ord
              , Typeable
              )

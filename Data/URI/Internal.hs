@@ -14,6 +14,7 @@ module Data.URI.Internal
     )
     where
 import Control.Applicative
+import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Primitive
 import Control.Monad.Unicode
@@ -69,6 +70,12 @@ instance (Hashable α, Hashable β) ⇒ Hashable (LargeKey α β) where
     {-# INLINE hashWithSalt #-}
     hashWithSalt salt (LargeKey a b)
         = salt `hashWithSalt` a `hashWithSalt` b
+
+-- FIXME: Remove this when the largeword starts providing NFData
+-- instance.
+instance (NFData α, NFData β) ⇒ NFData (LargeKey α β) where
+    {-# INLINE rnf #-}
+    rnf (LargeKey a b) = rnf a `seq` rnf b
 
 -- FIXME: Remove this when the vector-bytestring starts providing
 -- FoldCase instances.

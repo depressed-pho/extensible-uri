@@ -17,6 +17,7 @@ module Data.URI.Internal.UserInfo
 import Blaze.ByteString.Builder (Builder)
 import qualified Blaze.ByteString.Builder.ByteString as BB
 import Control.Applicative
+import Control.DeepSeq
 import Control.Failure
 import Codec.URI.PercentEncoding (DelimitedByteString)
 import qualified Codec.URI.PercentEncoding as PE
@@ -44,6 +45,7 @@ import Test.QuickCheck.Arbitrary
 newtype UserInfo = UserInfo { unUserInfo ∷ DelimitedByteString }
     deriving ( Eq
              , Hashable
+             , NFData
              , Ord
              , Typeable
              , Monoid

@@ -19,6 +19,7 @@ module Codec.URI.PercentEncoding
     )
     where
 import Control.Applicative
+import Control.DeepSeq
 import Control.Exception.Base
 import Control.Failure
 import Control.Monad
@@ -52,6 +53,8 @@ data DelimitableOctet
 instance Hashable DelimitableOctet where
     hashWithSalt salt (marshal → (isDelim, w))
         = salt `hashWithSalt` isDelim `hashWithSalt` w
+
+instance NFData DelimitableOctet
 
 #if defined(MIN_VERSION_QuickCheck)
 instance Arbitrary DelimitableOctet where
