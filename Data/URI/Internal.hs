@@ -31,6 +31,7 @@ import qualified Data.Vector.Storable.ByteString.Char8 as C8
 import Data.Word
 import Foreign.ForeignPtr
 import Foreign.Storable
+import Numeric.Natural
 import Prelude.Unicode
 
 
@@ -69,6 +70,17 @@ instance (Hashable α, Storable α) ⇒ Hashable (SV.Vector α) where
         where
           (fp, n) = SV.unsafeToForeignPtr0 sv
           len     = n ⋅ sizeOf ((⊥) ∷ α)
+
+
+-- FIXME: Remove this when the nats starts providing Hashable instance.
+instance Hashable Natural where
+    {-# INLINE hashWithSalt #-}
+    hashWithSalt salt n
+        = salt `hashWithSalt` toInteger n
+
+
+-- FIXME: Remove this when the nats starts providing NFData instance.
+instance NFData Natural
 
 
 -- FIXME: Remove this when the largeword starts providing Hashable

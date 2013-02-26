@@ -17,6 +17,7 @@ import Data.Typeable
 import Data.URI.Internal ()
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
 import Data.Word (Word32)
+import Numeric.Natural
 
 
 -- |The 'Host' subcomponent of authority is identified by an IP
@@ -32,7 +33,7 @@ import Data.Word (Word32)
 data Host
     = IPv4Address !Word32
     | IPv6Address !Word128 !(Maybe (CI Text))
-    | IPvFuture   !Integer !(CI ByteString)
+    | IPvFuture   !Natural !(CI ByteString)
     | RegName     !(CI Text)
     deriving (Eq, Ord, Typeable)
 
