@@ -5,6 +5,7 @@
   , FlexibleInstances
   , MultiParamTypeClasses
   , ScopedTypeVariables
+  , TemplateHaskell
   , TypeFamilies
   , UnicodeSyntax
   , ViewPatterns
@@ -22,7 +23,6 @@ import Control.Applicative
 import Control.DeepSeq
 import Control.Exception.Base
 import Control.Failure
-import Control.Monad
 import Data.Bits
 import Data.ByteString.Internal (w2c)
 import Data.Hashable
@@ -32,11 +32,11 @@ import Data.Typeable
 import Data.Vector.Storable.ByteString (ByteString)
 import qualified Data.Vector.Storable.ByteString.Char8 as C8
 import qualified Data.Vector.Generic as GV
-import qualified Data.Vector.Generic.Mutable as MV
 import qualified Data.Vector.Unboxed as UV
 import qualified Data.Vector.Fusion.Stream as PS
 import Data.Vector.Fusion.Stream.Monadic
 import Data.Vector.Fusion.Stream.Size
+import Data.Vector.Unboxed.Deriving (derivingUnbox)
 import Data.URI.Internal
 import Data.Word
 import Prelude.Unicode
@@ -65,11 +65,6 @@ instance CoArbitrary DelimitableOctet where
     coarbitrary = coarbitrary ∘ marshal
 #endif
 
-newtype instance UV.MVector s DelimitableOctet
-    = MV_DelimitableOctet (UV.MVector s (Bool, Word8))
-newtype instance UV.Vector    DelimitableOctet
-    = V_DelimitableOctet  (UV.Vector    (Bool, Word8))
-
 marshal ∷ DelimitableOctet → (Bool, Word8)
 {-# INLINE marshal #-}
 marshal (Delimiter w) = (True , w)
@@ -80,65 +75,10 @@ unmarshal ∷ (Bool, Word8) → DelimitableOctet
 unmarshal (True , w) = Delimiter w
 unmarshal (False, w) = Literal   w
 
-instance MV.MVector UV.MVector DelimitableOctet where
-    {-# INLINE basicLength #-}
-    basicLength (MV_DelimitableOctet v) = MV.basicLength v
-    {-# INLINE basicUnsafeSlice #-}
-    basicUnsafeSlice i n (MV_DelimitableOctet v)
-        = MV_DelimitableOctet $ MV.basicUnsafeSlice i n v
-    {-# INLINE basicOverlaps #-}
-    basicOverlaps (MV_DelimitableOctet v1) (MV_DelimitableOctet v2)
-        = MV.basicOverlaps v1 v2
-    {-# INLINE basicUnsafeNew #-}
-    basicUnsafeNew n = MV_DelimitableOctet `liftM` MV.basicUnsafeNew n
-    {-# INLINE basicUnsafeReplicate #-}
-    basicUnsafeReplicate n
-        = (MV_DelimitableOctet `liftM`) ∘ MV.basicUnsafeReplicate n ∘ marshal
-    {-# INLINE basicUnsafeRead #-}
-    basicUnsafeRead (MV_DelimitableOctet v) i
-        = unmarshal `liftM` MV.basicUnsafeRead v i
-    {-# INLINE basicUnsafeWrite #-}
-    basicUnsafeWrite (MV_DelimitableOctet v) i
-        = MV.basicUnsafeWrite v i ∘ marshal
-    {-# INLINE basicClear #-}
-    basicClear (MV_DelimitableOctet v) = MV.basicClear v
-    {-# INLINE basicSet #-}
-    basicSet (MV_DelimitableOctet v) = MV.basicSet v ∘ marshal
-    {-# INLINE basicUnsafeCopy #-}
-    basicUnsafeCopy (MV_DelimitableOctet v1) (MV_DelimitableOctet v2)
-        = MV.basicUnsafeCopy v1 v2
-    {-# INLINE basicUnsafeMove #-}
-    basicUnsafeMove (MV_DelimitableOctet v1) (MV_DelimitableOctet v2)
-        = MV.basicUnsafeMove v1 v2
-    {-# INLINE basicUnsafeGrow #-}
-    basicUnsafeGrow (MV_DelimitableOctet v) n
-        = MV_DelimitableOctet `liftM` MV.basicUnsafeGrow v n
-
-instance GV.Vector UV.Vector DelimitableOctet where
-    {-# INLINE basicUnsafeFreeze #-}
-    basicUnsafeFreeze (MV_DelimitableOctet v)
-        = V_DelimitableOctet `liftM` GV.basicUnsafeFreeze v
-    {-# INLINE basicUnsafeThaw #-}
-    basicUnsafeThaw (V_DelimitableOctet v)
-        = MV_DelimitableOctet `liftM` GV.basicUnsafeThaw v
-    {-# INLINE basicLength #-}
-    basicLength (V_DelimitableOctet v) = GV.basicLength v
-    {-# INLINE basicUnsafeSlice #-}
-    basicUnsafeSlice i n (V_DelimitableOctet v)
-        = V_DelimitableOctet $ GV.basicUnsafeSlice i n v
-    {-# INLINE basicUnsafeIndexM #-}
-    basicUnsafeIndexM (V_DelimitableOctet v) i
-        = unmarshal `liftM` GV.basicUnsafeIndexM v i
-    {-# INLINE basicUnsafeCopy #-}
-    basicUnsafeCopy (MV_DelimitableOctet mv) (V_DelimitableOctet v)
-        = GV.basicUnsafeCopy mv v
-    {-# INLINE elemseq #-}
-    elemseq _ o z
-        = case marshal o of
-            (isDelim, w) → GV.elemseq ((⊥) ∷ UV.Vector Bool ) isDelim $
-                           GV.elemseq ((⊥) ∷ UV.Vector Word8) w z
-
-instance UV.Unbox DelimitableOctet
+derivingUnbox "DelimitableOctet"
+    [t| DelimitableOctet → (Bool, Word8) |]
+    [| marshal   |]
+    [| unmarshal |]
 
 -- |Decode every percent-encoded octets and turn every letters to
 -- 'Literal's. Throws a runtime exception for 'DecodeError's.
@@ -219,7 +159,8 @@ mstream ∷ (Monad m, GV.Vector v α) ⇒ v α → Stream m α
 {-# INLINE mstream #-}
 mstream = PS.liftStream ∘ GV.stream
 
--- THINKME: This is terrible, but what else can we do...?
+-- THINKME: This is terrible, but what else can we do? See:
+-- http://trac.haskell.org/vector/ticket/81
 munstream ∷ (Functor m, Monad m, GV.Vector v α) ⇒ Stream m α → m (v α)
 {-# INLINE munstream #-}
 munstream s = GV.unstream ∘ PS.unsafeFromList (size s) <$> toList s

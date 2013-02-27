@@ -58,7 +58,8 @@ Library
         semigroups           == 0.9.*,
         text                 == 0.11.*,
         vector               == 0.10.*,
-        vector-bytestring    == 0.0.*
+        vector-bytestring    == 0.0.*,
+        vector-th-unbox      == 0.2.*
 
     Default-Language:
         Haskell2010
