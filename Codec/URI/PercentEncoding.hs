@@ -89,10 +89,6 @@ instance IsString (UV.Vector DelimitableOctet) where
             Right v → v
             Left  e → throw (e ∷ DecodeError)
 
-instance Hashable (UV.Vector DelimitableOctet) where
-    {-# INLINE hashWithSalt #-}
-    hashWithSalt = UV.foldl' hashWithSalt
-
 #if defined(MIN_VERSION_QuickCheck)
 instance Arbitrary (UV.Vector DelimitableOctet) where
     arbitrary =  UV.fromList <$> arbitrary

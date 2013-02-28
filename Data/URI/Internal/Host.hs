@@ -11,12 +11,12 @@ import Control.Applicative
 import Control.DeepSeq
 import Data.CaseInsensitive as CI
 import Data.Hashable
-import Data.LargeWord (Word128)
 import Data.Text (Text)
 import Data.Typeable
 import Data.URI.Internal ()
+import qualified Data.Vector.Unboxed as UV
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
-import Data.Word (Word32)
+import Data.Word (Word8, Word16)
 import Numeric.Natural
 
 
@@ -31,9 +31,17 @@ import Numeric.Natural
 -- cost of deploying another registry. See:
 -- <http://tools.ietf.org/html/rfc3986#section-3.2.2>
 data Host
-    = IPv4Address !Word32
-    | IPv6Address !Word128 !(Maybe (CI Text))
+    = -- |4-octets literal IPv4 address.
+      IPv4Address !(UV.Vector Word8)
+      -- |8 * 16-bit literal IPv6 address with optional zone ID. (See
+      -- <http://tools.ietf.org/html/rfc6874>)
+    | IPv6Address !(UV.Vector Word16) !(Maybe (CI ByteString))
+      -- |As-yet-undefined IP literal address.
     | IPvFuture   !Natural !(CI ByteString)
+      -- |Registered name, which is usually intended for lookup within
+      -- a locally defined host or service name registry, though the
+      -- URI's scheme-specific semantics may require that a specific
+      -- registry (or fixed name table) be used instead.
     | RegName     !(CI Text)
     deriving (Eq, Ord, Typeable)
 

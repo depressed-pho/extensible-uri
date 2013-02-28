@@ -23,11 +23,11 @@ import Data.Attoparsec.Char8
 import Data.CaseInsensitive
 import Data.Char
 import Data.Hashable
-import Data.LargeWord (LargeKey(..))
 import Data.Vector.Fusion.Util
 import qualified Data.Vector.Storable as SV
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
 import qualified Data.Vector.Storable.ByteString.Char8 as C8
+import qualified Data.Vector.Unboxed as UV
 import Data.Word
 import Foreign.ForeignPtr
 import Foreign.Storable
@@ -63,13 +63,21 @@ finishOff = ((endOfInput *>) ∘ pure =≪)
 -- FIXME: Remove this when the vector starts providing Hashable
 -- instances.
 instance (Hashable α, Storable α) ⇒ Hashable (SV.Vector α) where
-    {-# INLINE hashWithSalt #-}
+    {-# INLINEABLE hashWithSalt #-}
     hashWithSalt salt sv = unsafeInlineIO $
                            withForeignPtr fp $ \p →
                            hashPtrWithSalt p (fromIntegral len) salt
         where
           (fp, n) = SV.unsafeToForeignPtr0 sv
           len     = n ⋅ sizeOf ((⊥) ∷ α)
+
+
+-- FIXME: Remove this when the vector starts providing Hashable
+-- instances. Unboxed vectors don't expose its internal representation
+-- (ByteArray#) so we can't implement an efficient instance.
+instance (Hashable α, UV.Unbox α) ⇒ Hashable (UV.Vector α) where
+    {-# INLINE hashWithSalt #-}
+    hashWithSalt = UV.foldl' hashWithSalt
 
 
 -- FIXME: Remove this when the nats starts providing Hashable instance.
@@ -81,21 +89,6 @@ instance Hashable Natural where
 
 -- FIXME: Remove this when the nats starts providing NFData instance.
 instance NFData Natural
-
-
--- FIXME: Remove this when the largeword starts providing Hashable
--- instance.
-instance (Hashable α, Hashable β) ⇒ Hashable (LargeKey α β) where
-    {-# INLINE hashWithSalt #-}
-    hashWithSalt salt (LargeKey a b)
-        = salt `hashWithSalt` a `hashWithSalt` b
-
-
--- FIXME: Remove this when the largeword starts providing NFData
--- instance.
-instance (NFData α, NFData β) ⇒ NFData (LargeKey α β) where
-    {-# INLINE rnf #-}
-    rnf (LargeKey a b) = rnf a `seq` rnf b
 
 
 -- FIXME: Remove this when the vector-bytestring starts providing
