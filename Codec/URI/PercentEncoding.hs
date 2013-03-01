@@ -45,7 +45,7 @@ import Prelude.Unicode
 import Test.QuickCheck.Arbitrary
 #endif
 
--- |FIXME: docs
+-- |FIXME: doc
 data DelimitableOctet
     = Delimiter !Word8
     | Literal   !Word8
@@ -145,7 +145,7 @@ encode isUnsafe = GV.unstream ∘ encodeStream isUnsafe ∘ GV.stream
 -- using a predicate to determine which non-encoded letters should be
 -- considered to be delimiters. Note that encoded octets are always
 -- considered to be 'Literal'.
-decode ∷ ∀f. (Functor f, Failure DecodeError f)
+decode ∷ (Functor f, Failure DecodeError f)
        ⇒ (Char → Bool)
        → ByteString
        → f DelimitedByteString
@@ -153,7 +153,7 @@ decode ∷ ∀f. (Functor f, Failure DecodeError f)
 decode isDelim = munstream ∘ decodeStream isDelim ∘ mstream
 
 -- |A version of 'decode' that decodes an input with no delimiters.
-decode' ∷ ∀f. (Functor f, Failure DecodeError f)
+decode' ∷ (Functor f, Failure DecodeError f)
         ⇒ ByteString
         → f ByteString
 {-# INLINE decode' #-}

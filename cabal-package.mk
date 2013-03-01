@@ -8,14 +8,18 @@
 #   RUN_COMMAND :: command to be run for "make run"
 #
 
-GHC      ?= ghc
-FIND     ?= find
-RM_RF    ?= rm -rf
-SUDO     ?= sudo
 AUTOCONF ?= autoconf
+DARCS    ?= darcs
+DITZ     ?= ditz
+FIND     ?= find
+GREP     ?= grep
+GHC      ?= ghc
+GIT      ?= git
 HLINT    ?= hlint
 HPC      ?= hpc
-DITZ     ?= ditz
+RM_RF    ?= rm -rf
+RSYNC    ?= rsync
+SUDO     ?= sudo
 
 CONFIGURE_ARGS ?= --disable-optimization
 HADDOCK_OPTS   ?= --hyperlink-source
@@ -107,6 +111,13 @@ test: build
 	fi
 
 # -- Find FIXME Tags ----------------------------------------------------------
+ifeq ($(shell ls -d .git 2>/dev/null),.git)
+fixme:
+	@$(FIND) . \
+		-depth 1 -not -name '*.mk' \
+		-exec $(GIT) grep -E 'FIXME|THINKME|TODO' {} + \
+		|| echo 'No FIXME, THINKME, nor TODO found.'
+else
 fixme:
 	@$(FIND) . \
 		\( -name 'dist' -or -name '.git' -or -name '_darcs' \) -prune \
@@ -114,8 +125,9 @@ fixme:
 		\( -name '*.c'   -or -name '*.h'   -or \
 		   -name '*.hs'  -or -name '*.lhs' -or \
 		   -name '*.hsc' -or -name '*.cabal' \) \
-		-exec egrep 'FIXME|THINKME|TODO' {} \+ \
+		-exec $(GREP) -n -E 'FIXME|THINKME|TODO' {} + \
 		|| echo 'No FIXME, THINKME, nor TODO found.'
+endif
 
 # -- HLint --------------------------------------------------------------------
 HLINT_TARGETS ?= $$(find -E . -type d -name dist -prune -o -regex '.*\.(hsc?|lhs)' -print)
@@ -142,21 +154,21 @@ push: push-repo push-ditz push-doc
 
 push-repo:
 	if [ -d "_darcs" ]; then \
-		darcs push; \
+		$(DARCS) push; \
 	elif [ -d ".git" ]; then \
-		git push --all && git push --tags; \
+		$(GIT) push --all && git push --tags; \
 	fi
 
 push-ditz: ditz
 	if [ -d "dist/ditz" ]; then \
-		rsync -av --delete \
+		$(RSYNC) -av --delete \
 			dist/ditz/ \
 			www@nem.cielonegro.org:static.cielonegro.org/htdocs/ditz/$(PKG_NAME); \
 	fi
 
 push-doc: doc
 	if [ -d "dist/doc" ]; then \
-		rsync -av --delete \
+		$(RSYNC) -av --delete \
 			dist/doc/html/$(PKG_NAME)/ \
 			www@nem.cielonegro.org:static.cielonegro.org/htdocs/doc/$(PKG_NAME); \
 	fi
