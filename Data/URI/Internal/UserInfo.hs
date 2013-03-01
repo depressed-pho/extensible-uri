@@ -16,11 +16,11 @@ module Data.URI.Internal.UserInfo
     where
 import Blaze.ByteString.Builder (Builder)
 import qualified Blaze.ByteString.Builder.ByteString as BB
+import Codec.URI.PercentEncoding (DelimitedByteString)
+import qualified Codec.URI.PercentEncoding as PE
 import Control.Applicative
 import Control.DeepSeq
 import Control.Failure
-import Codec.URI.PercentEncoding (DelimitedByteString)
-import qualified Codec.URI.PercentEncoding as PE
 import Data.Attoparsec.Char8
 import Data.Data
 import Data.Hashable
@@ -75,24 +75,23 @@ instance IsString UserInfo where
 -- |'Parser' for 'UserInfo'.
 parser ∷ Parser UserInfo
 {-# INLINEABLE parser #-}
-parser = do src ← takeWhile isAllowedInUserInfo
+parser = do src ← takeWhile isAllowed
             case PE.decode (≡ ':') (fromLegacyByteString src) of
               Right dst → pure $ UserInfo dst
               Left  e   → fail $ show (e ∷ PE.DecodeError)
          <?>
          "userinfo"
+    where
+      isAllowed ∷ Char → Bool
+      {-# INLINE isAllowed #-}
+      isAllowed c = isUnreserved c ∨
+                    isPctEncoded c ∨
+                    isSubDelim   c ∨
+                    ':' ≡        c
 
 isSafeInUserInfo ∷ Char → Bool
 {-# INLINE isSafeInUserInfo #-}
 isSafeInUserInfo c = isUnreserved c ∨ isSubDelim c
-
-isAllowedInUserInfo ∷ Char → Bool
-{-# INLINE isAllowedInUserInfo #-}
-isAllowedInUserInfo c
-    = isUnreserved c ∨
-      isPctEncoded c ∨
-      isSubDelim   c ∨
-      ':' ≡        c
 
 -- |Create a 'Builder' from an 'UserInfo'.
 toBuilder ∷ UserInfo → Builder

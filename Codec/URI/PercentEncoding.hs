@@ -17,6 +17,7 @@ module Codec.URI.PercentEncoding
     , DecodeError(..)
     , encode
     , decode
+    , decode'
     )
     where
 import Control.Applicative
@@ -144,12 +145,28 @@ encode isUnsafe = GV.unstream ∘ encodeStream isUnsafe ∘ GV.stream
 -- using a predicate to determine which non-encoded letters should be
 -- considered to be delimiters. Note that encoded octets are always
 -- considered to be 'Literal'.
-decode ∷ ∀f. (Applicative f, Failure DecodeError f)
+decode ∷ ∀f. (Functor f, Failure DecodeError f)
        ⇒ (Char → Bool)
        → ByteString
        → f DelimitedByteString
 {-# INLINE decode #-}
 decode isDelim = munstream ∘ decodeStream isDelim ∘ mstream
+
+-- |A version of 'decode' that decodes an input with no delimiters.
+decode' ∷ ∀f. (Functor f, Failure DecodeError f)
+        ⇒ ByteString
+        → f ByteString
+{-# INLINE decode' #-}
+decode' = (homogenise <$>) ∘ decode (const False)
+
+homogenise ∷ DelimitedByteString → ByteString
+{-# INLINE homogenise #-}
+homogenise = GV.unstream ∘ PS.map hom' ∘ GV.stream
+    where
+      hom' ∷ DelimitableOctet → Word8
+      {-# INLINE hom' #-}
+      hom' (Delimiter w) = w
+      hom' (Literal   w) = w
 
 mstream ∷ (Monad m, GV.Vector v α) ⇒ v α → Stream m α
 {-# INLINE mstream #-}
@@ -161,10 +178,10 @@ munstream ∷ (Functor m, Monad m, GV.Vector v α) ⇒ Stream m α → m (v α)
 {-# INLINE munstream #-}
 munstream s = GV.unstream ∘ PS.unsafeFromList (size s) <$> toList s
 
-encodeStream ∷ ∀f. (Applicative f, Monad f)
+encodeStream ∷ ∀m. Monad m
              ⇒ (Char → Bool)
-             → Stream f DelimitableOctet
-             → Stream f Word8
+             → Stream m DelimitableOctet
+             → Stream m Word8
 {-# INLINE encodeStream #-}
 encodeStream isUnsafe (Stream step (s0 ∷ s) sz)
     = Stream go (EInitial s0) sz'
@@ -175,25 +192,25 @@ encodeStream isUnsafe (Stream step (s0 ∷ s) sz)
               Just n  → Max $ n ⋅ 3
               Nothing → Unknown
 
-      go ∷ EncState s → f (Step (EncState s) Word8)
+      go ∷ EncState s → m (Step (EncState s) Word8)
       {-# INLINE go #-}
       go (EInitial s)
           = do r ← step s
                case r of
                  Yield (Delimiter w) s'
-                          → pure $ Yield w    (EInitial s'    )
+                          → return $ Yield w    (EInitial s'    )
                  Yield (Literal   w) s'
                      | isUnsafe (w2c w)
                           → let (u, l) = encodeHex w in
-                            pure $ Yield 0x25 (EPercent s' u l)
+                            return $ Yield 0x25 (EPercent s' u l)
                      | otherwise
-                          → pure $ Yield w    (EInitial s'    )
-                 Skip s'  → pure $ Skip       (EInitial s'    )
-                 Done     → pure $ Done
-      go (EPercent s u l) = pure $ Yield u (EUpperHalf s l)
-      go (EUpperHalf s l) = pure $ Yield l (EInitial   s  )
+                          → return $ Yield w    (EInitial s'    )
+                 Skip s'  → return $ Skip       (EInitial s'    )
+                 Done     → return   Done
+      go (EPercent s u l) = return $ Yield u (EUpperHalf s l)
+      go (EUpperHalf s l) = return $ Yield l (EInitial   s  )
 
-decodeStream ∷ ∀f. (Applicative f, Failure DecodeError f)
+decodeStream ∷ ∀f. Failure DecodeError f
              ⇒ (Char → Bool)
              → Stream f Word8
              → Stream f DelimitableOctet
@@ -207,25 +224,25 @@ decodeStream isDelim (Stream step (s0 ∷ s) sz)
           = do r ← step s
                case r of
                  Yield w s'
-                     | w ≡ 0x25        → pure $ Skip                (DPercent s')
-                     | isDelim (w2c w) → pure $ Yield (Delimiter w) (DInitial s')
-                     | otherwise       → pure $ Yield (Literal   w) (DInitial s')
-                 Skip    s'            → pure $ Skip                (DInitial s')
-                 Done                  → pure Done
+                     | w ≡ 0x25        → return $ Skip                (DPercent s')
+                     | isDelim (w2c w) → return $ Yield (Delimiter w) (DInitial s')
+                     | otherwise       → return $ Yield (Literal   w) (DInitial s')
+                 Skip    s'            → return $ Skip                (DInitial s')
+                 Done                  → return   Done
       go (DPercent s)
           = do r ← step s
                case r of
-                 Yield u s' → pure $ Skip (DUpperHalf s' u)
-                 Skip    s' → pure $ Skip (DPercent   s'  )
-                 Done       → pure Done
+                 Yield u s' → return $ Skip (DUpperHalf s' u)
+                 Skip    s' → return $ Skip (DPercent   s'  )
+                 Done       → return   Done
       go (DUpperHalf s u)
           = do r ← step s
                case r of
                  Yield l s' → do w ← decodeHex u l
                                  -- Encoded octets are always literal.
-                                 pure $ Yield (Literal w) (DInitial s')
-                 Skip    s' → pure    $ Skip (DUpperHalf s' u)
-                 Done       → failure $ MissingLowerHalf (w2c u)
+                                 return $ Yield (Literal w) (DInitial s')
+                 Skip    s' → return    $ Skip (DUpperHalf s' u)
+                 Done       → failure   $ MissingLowerHalf (w2c u)
 
 encodeHex ∷ Word8 → (Word8, Word8)
 {-# INLINEABLE encodeHex #-}
@@ -239,12 +256,12 @@ encodeHex w = ( encodeHalf $ w `shiftR` 4
           | h < 0x0A  = h      + 0x30 -- '0'..'9'
           | otherwise = h - 10 + 0x65 -- 'A'..'F'
 
-decodeHex ∷ (Applicative f, Failure DecodeError f) ⇒ Word8 → Word8 → f Word8
+decodeHex ∷ Failure DecodeError f ⇒ Word8 → Word8 → f Word8
 {-# INLINEABLE decodeHex #-}
 decodeHex u l
     | (¬) (isHexDigit_w8 u) = failure $ InvalidUpperHalf (w2c u)
     | (¬) (isHexDigit_w8 l) = failure $ InvalidLowerHalf (w2c u) (w2c l)
-    | otherwise             = pure    $ unsafeDecodeHex u l
+    | otherwise             = return  $ unsafeDecodeHex u l
 
 unsafeDecodeHex ∷ Word8 → Word8 → Word8
 {-# INLINEABLE unsafeDecodeHex #-}
