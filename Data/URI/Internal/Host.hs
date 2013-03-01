@@ -1,23 +1,30 @@
 {-# LANGUAGE
     CPP
   , DeriveDataTypeable
+  , OverloadedStrings
   , UnicodeSyntax
   #-}
 module Data.URI.Internal.Host
     ( Host
+    , parser
     )
     where
 import Control.Applicative
 import Control.DeepSeq
+import qualified Data.Attoparsec as B
+import Data.Attoparsec.Char8
 import Data.CaseInsensitive as CI
 import Data.Hashable
 import Data.Text (Text)
 import Data.Typeable
-import Data.URI.Internal ()
+import Data.URI.Internal
+import qualified Data.Vector.Generic as GV
 import qualified Data.Vector.Unboxed as UV
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
+import Data.Vector.Storable.ByteString.Legacy
 import Data.Word (Word8, Word16)
 import Numeric.Natural
+import Prelude.Unicode
 
 
 -- |The 'Host' subcomponent of authority is identified by an IP
@@ -68,3 +75,104 @@ instance NFData Host where
     rnf (IPv6Address w s) = rnf w `seq` rnf s
     rnf (IPvFuture   v a) = rnf v `seq` rnf a
     rnf (RegName     n  ) = rnf n
+
+
+-- |'Parser' for 'Host's.
+parser ∷ Parser Host
+{-# INLINEABLE parser #-}
+parser = choice
+         [ pIPLiteral
+         , pIPv4Addr
+         , pRegName
+         ]
+
+
+pIPLiteral ∷ Parser Host
+{-# INLINEABLE pIPLiteral #-}
+pIPLiteral = (char '[' *> (pIPv6Addr <|> pIPvFuture) <* char ']')
+             <?>
+             "IP-literal"
+
+
+pIPvFuture ∷ Parser Host
+{-# INLINEABLE pIPvFuture #-}
+pIPvFuture = do _   ← char 'v'
+                ver ← hexadecimal
+                _   ← char '.'
+                lit ← takeWhile1 isAllowed
+                pure $ IPvFuture ver $ CI.mk $ fromLegacyByteString lit
+             <?>
+             "IPvFuture"
+    where
+      isAllowed ∷ Char → Bool
+      {-# INLINEABLE isAllowed #-}
+      isAllowed c = isUnreserved c ∨ isSubDelim c ∨ c ≡ ':'
+
+
+{-
+      IPv6address =                            6( h16 ":" ) ls32
+                  /                       "::" 5( h16 ":" ) ls32
+                  / [               h16 ] "::" 4( h16 ":" ) ls32
+                  / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
+                  / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
+                  / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
+                  / [ *4( h16 ":" ) h16 ] "::"              ls32
+                  / [ *5( h16 ":" ) h16 ] "::"              h16
+                  / [ *6( h16 ":" ) h16 ] "::"
+
+      ls32        = ( h16 ":" h16 ) / IPv4address
+                  ; least-significant 32 bits of address
+
+      h16         = 1*4HEXDIG
+                  ; 16 bits of address represented in hexadecimal
+-}
+pIPv6Addr ∷ Parser Host
+{-# INLINEABLE pIPv6Addr #-}
+pIPv6Addr = error "FIXME"
+
+
+pIPv4Addr ∷ Parser Host
+{-# INLINEABLE pIPv4Addr #-}
+pIPv4Addr = do o0 ← decOctet
+               _  ← char '.'
+               o1 ← decOctet
+               _  ← char '.'
+               o2 ← decOctet
+               _  ← char '.'
+               o3 ← decOctet
+               pure $ IPv4Address $ GV.fromList [o0, o1, o2, o3]
+            <?>
+            "IPv4address"
+    where
+      decOctet ∷ Parser Word8
+      {-# INLINEABLE decOctet #-}
+      decOctet = choice
+                 [ do _ ← string "25"
+                      x ← atoi <$> B.satisfy (inRange_w8 '0' '5')
+                      pure $ 250 + x
+
+                 , do _ ← char '2'
+                      x ← atoi <$> B.satisfy (inRange_w8 '0' '4')
+                      y ← atoi <$> B.satisfy isDigit_w8
+                      pure $ 200 + 10 ⋅ x + y
+
+                 , do _ ← char '1'
+                      x ← atoi <$> B.satisfy isDigit_w8
+                      y ← atoi <$> B.satisfy isDigit_w8
+                      pure $ 100 + 10 ⋅ x + y
+
+                 , do x ← atoi <$> B.satisfy (inRange_w8 '1' '9')
+                      y ← atoi <$> B.satisfy isDigit_w8
+                      pure $ 10 ⋅ x + y
+
+                 , atoi <$> B.satisfy isDigit_w8
+                 ]
+                 <?>
+                 "dec-octet"
+
+{-
+      reg-name    = *( unreserved / pct-encoded / sub-delims )
+-}
+pRegName ∷ Parser Host
+{-# INLINEABLE pRegName #-}
+pRegName = error "FIXME"

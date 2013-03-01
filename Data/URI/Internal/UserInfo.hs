@@ -72,8 +72,7 @@ instance IsString UserInfo where
             Right s → s
             Left  e → error e
 
--- |'Parser' for 'UserInfo' which may fail after consuming arbitrary
--- number of input letters.
+-- |'Parser' for 'UserInfo'.
 parser ∷ Parser UserInfo
 {-# INLINEABLE parser #-}
 parser = do src ← takeWhile isAllowedInUserInfo

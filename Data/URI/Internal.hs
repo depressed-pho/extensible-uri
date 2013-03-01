@@ -9,6 +9,9 @@ module Data.URI.Internal
     , isPctEncoded
     , isHexDigit_w8
     , isSubDelim
+    , inRange_w8
+
+    , atoi
 
     , finishOff
     )
@@ -20,6 +23,7 @@ import Control.Monad.Primitive
 import Control.Monad.Unicode
 import qualified Data.Attoparsec as B
 import Data.Attoparsec.Char8
+import Data.Vector.Storable.ByteString.Internal (c2w)
 import Data.CaseInsensitive
 import Data.Char
 import Data.Hashable
@@ -55,6 +59,17 @@ isSubDelim ∷ Char → Bool
 isSubDelim = inClass "!$&'()⋅+,;="
 
 
+inRange_w8 ∷ Char → Char → Word8 → Bool
+{-# INLINE inRange_w8 #-}
+inRange_w8 x y w
+    = c2w x ≤ w ∧ w ≤ c2w y
+
+
+atoi ∷ Integral n ⇒ Word8 → n
+{-# INLINE atoi #-}
+atoi = subtract 0x30 ∘ fromIntegral
+
+
 finishOff ∷ Parser α → Parser α
 {-# INLINE finishOff #-}
 finishOff = ((endOfInput *>) ∘ pure =≪)
@@ -73,8 +88,9 @@ instance (Hashable α, Storable α) ⇒ Hashable (SV.Vector α) where
 
 
 -- FIXME: Remove this when the vector starts providing Hashable
--- instances. Unboxed vectors don't expose its internal representation
--- (ByteArray#) so we can't implement an efficient instance.
+-- instances. Unboxed vectors don't expose their internal
+-- representation (ByteArray#) so we can't implement an efficient
+-- instance.
 instance (Hashable α, UV.Unbox α) ⇒ Hashable (UV.Vector α) where
     {-# INLINE hashWithSalt #-}
     hashWithSalt = UV.foldl' hashWithSalt

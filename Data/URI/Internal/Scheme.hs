@@ -15,8 +15,8 @@ module Data.URI.Internal.Scheme
     where
 import Blaze.ByteString.Builder (Builder)
 import qualified Blaze.ByteString.Builder.ByteString as BB
-#if defined(MIN_VERSION_QuickCheck)
 import Control.Applicative
+#if defined(MIN_VERSION_QuickCheck)
 import Control.Applicative.Unicode
 #endif
 import Control.DeepSeq
@@ -73,8 +73,7 @@ instance IsString Scheme where
             Right s → s
             Left  e → error e
 
--- |'Parser' for 'Scheme's which fails without consuming any input if
--- the first letter is not an ASCII alphabet.
+-- |'Parser' for 'Scheme's.
 parser ∷ Parser Scheme
 {-# INLINEABLE parser #-}
 parser = do x  ← satisfy first
