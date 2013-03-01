@@ -105,6 +105,10 @@ pIPvFuture = do _   ← char 'v'
       isAllowed c = isUnreserved c ∨ isSubDelim c ∨ c ≡ ':'
 
 {-
+      IPv6addrz   = IPv6address "%25" ZoneID
+
+      ZoneID      = 1*( unreserved / pct-encoded )
+
       IPv6address =                            6( h16 ":" ) ls32
                   /                       "::" 5( h16 ":" ) ls32
                   / [               h16 ] "::" 4( h16 ":" ) ls32
@@ -141,24 +145,29 @@ pIPv4Addr = do o0 ← decOctet
       decOctet ∷ Parser Word8
       {-# INLINEABLE decOctet #-}
       decOctet = choice
-                 [ do _ ← string "25"
+                 [ -- 250-255
+                   do _ ← string "25"
                       x ← atoi <$> B.satisfy (inRange_w8 '0' '5')
                       pure $ 250 + x
 
+                   -- 200-249
                  , do _ ← char '2'
                       x ← atoi <$> B.satisfy (inRange_w8 '0' '4')
                       y ← atoi <$> B.satisfy isDigit_w8
                       pure $ 200 + 10 ⋅ x + y
 
+                   -- 100-199
                  , do _ ← char '1'
                       x ← atoi <$> B.satisfy isDigit_w8
                       y ← atoi <$> B.satisfy isDigit_w8
                       pure $ 100 + 10 ⋅ x + y
 
+                   -- 10-99
                  , do x ← atoi <$> B.satisfy (inRange_w8 '1' '9')
                       y ← atoi <$> B.satisfy isDigit_w8
                       pure $ 10 ⋅ x + y
 
+                   -- 0-9
                  , atoi <$> B.satisfy isDigit_w8
                  ]
                  <?>
