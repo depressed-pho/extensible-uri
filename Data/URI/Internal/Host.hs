@@ -7,7 +7,7 @@
   , UnicodeSyntax
   #-}
 module Data.URI.Internal.Host
-    ( Host
+    ( Host(..)
     , parser
     )
     where

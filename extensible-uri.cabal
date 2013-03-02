@@ -31,8 +31,6 @@ Library
     Exposed-Modules:
         Codec.URI.PercentEncoding
         Data.URI
-
-    Other-Modules:
         Data.URI.Internal
         Data.URI.Internal.Host
         Data.URI.Internal.Scheme

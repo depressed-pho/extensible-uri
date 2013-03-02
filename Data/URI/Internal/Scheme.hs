@@ -7,7 +7,7 @@
   , ViewPatterns
   #-}
 module Data.URI.Internal.Scheme
-    ( Scheme
+    ( Scheme(..)
     , parser
     , fromByteString
     , toBuilder

@@ -8,7 +8,7 @@
   , ViewPatterns
   #-}
 module Data.URI.Internal.UserInfo
-    ( UserInfo
+    ( UserInfo(..)
     , parser
     , fromByteString
     , toBuilder
