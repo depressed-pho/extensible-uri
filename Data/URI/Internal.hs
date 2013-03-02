@@ -12,11 +12,17 @@ module Data.URI.Internal
     , inRange_w8
 
     , atoi
+    , htoi
 
+    , countV
+    , countUpToV
+    , countUpTo
+    , countUpTo1
     , finishOff
     )
     where
 import Control.Applicative
+import Control.Applicative.Unicode
 import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Primitive
@@ -28,6 +34,7 @@ import Data.CaseInsensitive
 import Data.Char
 import Data.Hashable
 import Data.Vector.Fusion.Util
+import qualified Data.Vector.Generic as GV
 import qualified Data.Vector.Storable as SV
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
 import qualified Data.Vector.Storable.ByteString.Char8 as C8
@@ -62,6 +69,29 @@ inRange_w8 x y w
 atoi ∷ Integral n ⇒ Word8 → n
 {-# INLINE atoi #-}
 atoi = subtract 0x30 ∘ fromIntegral
+
+htoi ∷ Integral n ⇒ Word8 → n
+{-# INLINEABLE htoi #-}
+htoi w | w ≥ 0x30 ∨ w ≤ 0x39 = fromIntegral (w - 0x30)
+       | w ≥ 0x61            = fromIntegral (w - 0x57)
+       | otherwise           = fromIntegral (w - 0x37)
+
+countV ∷ (GV.Vector v α, Functor m, Monad m) ⇒ Int → m α → m (v α)
+{-# INLINE countV #-}
+countV = ((GV.fromList <$>) ∘) ∘ count
+
+countUpToV ∷ (GV.Vector v α, Alternative f) ⇒ Int → f α → f (v α)
+{-# INLINE countUpToV #-}
+countUpToV = ((GV.fromList <$>) ∘) ∘ countUpTo
+
+countUpTo ∷ Alternative f ⇒ Int → f α → f [α]
+{-# INLINEABLE countUpTo #-}
+countUpTo 0 _ = pure []
+countUpTo n p = ((:) <$> p ⊛ countUpTo (n-1) p) <|> pure []
+
+countUpTo1 ∷ Alternative f ⇒ Int → f α → f [α]
+{-# INLINE countUpTo1 #-}
+countUpTo1 n p = (:) <$> p ⊛ countUpTo (n-1) p
 
 finishOff ∷ Parser α → Parser α
 {-# INLINE finishOff #-}

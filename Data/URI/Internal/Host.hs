@@ -1,7 +1,9 @@
 {-# LANGUAGE
     CPP
   , DeriveDataTypeable
+  , FlexibleContexts
   , OverloadedStrings
+  , ScopedTypeVariables
   , UnicodeSyntax
   #-}
 module Data.URI.Internal.Host
@@ -11,11 +13,16 @@ module Data.URI.Internal.Host
     where
 import qualified Codec.URI.PercentEncoding as PE
 import Control.Applicative
+import Control.Applicative.Unicode hiding ((∅))
 import Control.DeepSeq
 import qualified Data.Attoparsec as B
 import Data.Attoparsec.Char8
+import Data.Bits
 import Data.CaseInsensitive as CI
+import qualified Data.List as L
 import Data.Hashable
+import Data.Monoid
+import Data.Monoid.Unicode
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Typeable
@@ -80,13 +87,13 @@ parser ∷ Parser Host
 {-# INLINEABLE parser #-}
 parser = choice
          [ pIPLiteral
-         , pIPv4Addr
+         , IPv4Address <$> pIPv4Addr
          , pRegName
          ]
 
 pIPLiteral ∷ Parser Host
 {-# INLINEABLE pIPLiteral #-}
-pIPLiteral = (char '[' *> (pIPv6Addr <|> pIPvFuture) <* char ']')
+pIPLiteral = (char '[' *> (pIPv6Addrz <|> pIPvFuture) <* char ']')
              <?>
              "IP-literal"
 
@@ -104,32 +111,116 @@ pIPvFuture = do _   ← char 'v'
       {-# INLINEABLE isAllowed #-}
       isAllowed c = isUnreserved c ∨ isSubDelim c ∨ c ≡ ':'
 
-{-
-      IPv6addrz   = IPv6address "%25" ZoneID
+pIPv6Addrz ∷ Parser Host
+{-# INLINEABLE pIPv6Addrz #-}
+pIPv6Addrz = (IPv6Address <$> pIPv6Addr ⊛ (char '%' *> optional pZoneID))
+             <?>
+             "IPv6addrz"
 
-      ZoneID      = 1*( unreserved / pct-encoded )
-
-      IPv6address =                            6( h16 ":" ) ls32
-                  /                       "::" 5( h16 ":" ) ls32
-                  / [               h16 ] "::" 4( h16 ":" ) ls32
-                  / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
-                  / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
-                  / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
-                  / [ *4( h16 ":" ) h16 ] "::"              ls32
-                  / [ *5( h16 ":" ) h16 ] "::"              h16
-                  / [ *6( h16 ":" ) h16 ] "::"
-
-      ls32        = ( h16 ":" h16 ) / IPv4address
-                  ; least-significant 32 bits of address
-
-      h16         = 1*4HEXDIG
-                  ; 16 bits of address represented in hexadecimal
--}
-pIPv6Addr ∷ Parser Host
+pIPv6Addr ∷ ∀v. (GV.Vector v Word16, Monoid (v Word16)) ⇒ Parser (v Word16)
 {-# INLINEABLE pIPv6Addr #-}
-pIPv6Addr = error "FIXME"
+pIPv6Addr = choice
+            [ do x ← countV 6 (h16 <* char ':')
+                 y ← ls32
+                 pure $ x ⊕ y
 
-pIPv4Addr ∷ Parser Host
+            , do _ ← string "::"
+                 x ← countV 5 (h16 <* char ':')
+                 y ← ls32
+                 pure $ (∅) `pad` x ⊕ y
+
+            , do x ← option (∅) (GV.singleton <$> h16)
+                 _ ← string "::"
+                 y ← countV 4 (h16 <* char ':')
+                 z ← ls32
+                 pure $ x `pad` y ⊕ z
+
+            , do x ← option (∅)
+                       (GV.snoc <$> countUpToV 1 (h16 <* char ':') ⊛ h16)
+                 _ ← string "::"
+                 y ← countV 3 (h16 <* char ':')
+                 z ← ls32
+                 pure $ x `pad` y ⊕ z
+
+            , do x ← option (∅)
+                       (GV.snoc <$> countUpToV 2 (h16 <* char ':') ⊛ h16)
+                 _ ← string "::"
+                 y ← countV 2 (h16 <* char ':')
+                 z ← ls32
+                 pure $ x `pad` y ⊕ z
+
+            , do x ← option (∅)
+                       (GV.snoc <$> countUpToV 3 (h16 <* char ':') ⊛ h16)
+                 _ ← string "::"
+                 y ← h16 <* char ':'
+                 z ← ls32
+                 pure $ x `pad` (y `GV.cons` z)
+
+            , do x ← option (∅)
+                       (GV.snoc <$> countUpToV 4 (h16 <* char ':') ⊛ h16)
+                 _ ← string "::"
+                 y ← ls32
+                 pure $ x `pad` y
+
+            , do x ← option (∅)
+                       (GV.snoc <$> countUpToV 5 (h16 <* char ':') ⊛ h16)
+                 _ ← string "::"
+                 y ← h16
+                 pure $ x `pad` GV.singleton y
+
+            , do x ← option (∅)
+                       (GV.snoc <$> countUpToV 6 (h16 <* char ':') ⊛ h16)
+                 _ ← string "::"
+                 pure $ x `pad` (∅)
+            ]
+            <?>
+            "IPv6address"
+    where
+      h16 ∷ Parser Word16
+      {-# INLINEABLE h16 #-}
+      h16 = L.foldl' step 0 <$> countUpTo1 4 (B.satisfy isHexDigit_w8)
+          where
+            step ∷ Word16 → Word8 → Word16
+            {-# INLINE step #-}
+            step a w = (a `shiftL` 4) .|. htoi w
+
+      ls32 ∷ Parser (v Word16)
+      {-# INLINEABLE ls32 #-}
+      ls32 = do x ← h16
+                y ← char ':' *> h16
+                pure $ GV.fromList [x, y]
+             <|>
+             (repack <$> (pIPv4Addr ∷ Parser (UV.Vector Word8)))
+             <?>
+             "ls32"
+
+      repack ∷ GV.Vector v' Word8 ⇒ v' Word8 → v Word16
+      {-# INLINEABLE repack #-}
+      repack v = GV.fromList
+                 [ (fromIntegral (v GV.! 0) `shiftL` 8) .|. fromIntegral (v GV.! 1)
+                 , (fromIntegral (v GV.! 2) `shiftL` 8) .|. fromIntegral (v GV.! 3)
+                 ]
+
+      pad ∷ v Word16 → v Word16 → v Word16
+      {-# INLINE pad #-}
+      pad x y = let p = GV.replicate (8 - GV.length x - GV.length y) 0
+                in
+                  x ⊕ p ⊕ y
+
+pZoneID ∷ Parser (CI ByteString)
+{-# INLINEABLE pZoneID #-}
+pZoneID = do src ← takeWhile isAllowed
+             case PE.decode' (fromLegacyByteString src) of
+               Right dst → pure $ CI.mk dst
+               Left  e   → fail $ show (e ∷ PE.DecodeError)
+          <?>
+          "ZoneID"
+    where
+      isAllowed ∷ Char → Bool
+      {-# INLINE isAllowed #-}
+      isAllowed c = isUnreserved c ∨ isPctEncoded c
+
+pIPv4Addr ∷ GV.Vector v Word8 ⇒ Parser (v Word8)
 {-# INLINEABLE pIPv4Addr #-}
 pIPv4Addr = do o0 ← decOctet
                _  ← char '.'
@@ -138,7 +229,7 @@ pIPv4Addr = do o0 ← decOctet
                o2 ← decOctet
                _  ← char '.'
                o3 ← decOctet
-               pure $ IPv4Address $ GV.fromList [o0, o1, o2, o3]
+               pure $ GV.fromList [o0, o1, o2, o3]
             <?>
             "IPv4address"
     where
