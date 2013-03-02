@@ -63,3 +63,19 @@ Library
 
     GHC-Options:
         -Wall
+
+Test-Suite tests
+    Type:    exitcode-stdio-1.0
+    Main-Is: Test/Data/URI.hs
+    Other-Modules:
+        Test.Data.URI.Host
+    Build-Depends:
+        HUnit                == 1.2.*,
+        base                 == 4.*,
+        extensible-uri,
+        test-framework       == 0.8.*,
+        test-framework-hunit == 0.3.*
+    Default-Language:
+        Haskell2010
+    GHC-Options:
+        -Wall

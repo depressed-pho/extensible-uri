@@ -9,6 +9,7 @@
 module Data.URI.Internal.Host
     ( Host(..)
     , parser
+    , fromByteString
     )
     where
 import qualified Codec.URI.PercentEncoding as PE
@@ -16,6 +17,7 @@ import Control.Applicative
 import Control.Applicative.Unicode hiding ((∅))
 import Control.DeepSeq
 import qualified Data.Attoparsec as B
+import Control.Failure
 import Data.Attoparsec.Char8
 import Data.Bits
 import Data.CaseInsensitive as CI
@@ -120,55 +122,64 @@ pIPv6Addrz = (IPv6Address <$> pIPv6Addr ⊛ (char '%' *> optional pZoneID))
 pIPv6Addr ∷ ∀v. (GV.Vector v Word16, Monoid (v Word16)) ⇒ Parser (v Word16)
 {-# INLINEABLE pIPv6Addr #-}
 pIPv6Addr = choice
-            [ do x ← countV 6 (h16 <* char ':')
+            [ --                            6( h16 ":" ) ls32
+              do x ← countV 6 (h16 <* char ':')
                  y ← ls32
                  pure $ x ⊕ y
 
-            , do _ ← string "::"
+            , --                       "::" 5( h16 ":" ) ls32
+              do _ ← string "::"
                  x ← countV 5 (h16 <* char ':')
                  y ← ls32
                  pure $ (∅) `pad` x ⊕ y
 
-            , do x ← option (∅) (GV.singleton <$> h16)
+            , -- [               h16 ] "::" 4( h16 ":" ) ls32
+              do x ← option (∅) (GV.singleton <$> h16)
                  _ ← string "::"
                  y ← countV 4 (h16 <* char ':')
                  z ← ls32
                  pure $ x `pad` y ⊕ z
 
-            , do x ← option (∅)
+            , -- [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
+              do x ← option (∅)
                        (GV.snoc <$> countUpToV 1 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← countV 3 (h16 <* char ':')
                  z ← ls32
                  pure $ x `pad` y ⊕ z
 
-            , do x ← option (∅)
+            , -- [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
+              do x ← option (∅)
                        (GV.snoc <$> countUpToV 2 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← countV 2 (h16 <* char ':')
                  z ← ls32
                  pure $ x `pad` y ⊕ z
 
-            , do x ← option (∅)
+            , -- [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
+              do x ← option (∅)
                        (GV.snoc <$> countUpToV 3 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← h16 <* char ':'
                  z ← ls32
                  pure $ x `pad` (y `GV.cons` z)
 
-            , do x ← option (∅)
+            , -- [ *4( h16 ":" ) h16 ] "::"              ls32
+              do x ← option (∅)
                        (GV.snoc <$> countUpToV 4 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← ls32
                  pure $ x `pad` y
 
-            , do x ← option (∅)
+            , -- [ *5( h16 ":" ) h16 ] "::"              h16
+              do x ← option (∅)
                        (GV.snoc <$> countUpToV 5 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← h16
                  pure $ x `pad` GV.singleton y
 
-            , do x ← option (∅)
+            , -- [ *6( h16 ":" ) h16 ] "::"
+              do x ← option (∅)
                        (GV.snoc <$> countUpToV 6 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  pure $ x `pad` (∅)
@@ -282,3 +293,10 @@ pRegName = do src ← takeWhile isAllowed
       isAllowed c = isUnreserved c ∨
                     isPctEncoded c ∨
                     isSubDelim   c
+
+-- |Try to parse a 'Host' from an ascii string.
+fromByteString ∷ Failure String f ⇒ ByteString → f Host
+{-# INLINE fromByteString #-}
+fromByteString = either failure return ∘
+                 parseOnly parser      ∘
+                 toLegacyByteString
