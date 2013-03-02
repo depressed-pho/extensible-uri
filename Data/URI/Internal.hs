@@ -101,9 +101,9 @@ finishOff = ((endOfInput *>) ∘ pure =≪)
 -- instances.
 instance (Hashable α, Storable α) ⇒ Hashable (SV.Vector α) where
     {-# INLINEABLE hashWithSalt #-}
-    hashWithSalt salt sv = unsafeInlineIO $
-                           withForeignPtr fp $ \p →
-                           hashPtrWithSalt p (fromIntegral len) salt
+    hashWithSalt salt sv
+        = unsafeInlineIO ∘ withForeignPtr fp $
+          \p → hashPtrWithSalt p (fromIntegral len) salt
         where
           (fp, n) = SV.unsafeToForeignPtr0 sv
           len     = n ⋅ sizeOf ((⊥) ∷ α)
