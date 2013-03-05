@@ -12,14 +12,19 @@ import Test.HUnit ((@=?))
 
 tests ∷ [Test]
 tests = [ testCase "example IPv4address"
-          ( Right (IPv4Address (GV.fromList [1, 2, 3, 4]))
+          ( Right (IPv4Address (GV.fromList [1,2,3,4]))
             @=?
             (fromByteString "1.2.3.4" ∷ Either String Host)
           )
         , testCase "example IPv6address"
-          ( Right (IPv6Address (GV.fromList [0, 0, 0, 0, 0, 0, 0, 1]) Nothing)
+          ( Right (IPv6Address (GV.fromList [0,0,0,0,0,0,0,1]) Nothing)
             @=?
             (fromByteString "[::1]" ∷ Either String Host)
+          )
+        , testCase "example v4-mapped IPv6address"
+          ( Right (IPv6Address (GV.fromList [0,0,0,0,0,0xFFFF,0x7F00,0x0001]) Nothing)
+            @=?
+            (fromByteString "[::ffff:127.0.0.1]" ∷ Either String Host)
           )
         , testCase "example reg-name"
           ( Right (RegName "cielonegro.org")

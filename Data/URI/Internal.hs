@@ -72,7 +72,7 @@ atoi = subtract 0x30 ∘ fromIntegral
 
 htoi ∷ Integral n ⇒ Word8 → n
 {-# INLINEABLE htoi #-}
-htoi w | w ≥ 0x30 ∨ w ≤ 0x39 = fromIntegral (w - 0x30)
+htoi w | w ≥ 0x30 ∧ w ≤ 0x39 = fromIntegral (w - 0x30)
        | w ≥ 0x61            = fromIntegral (w - 0x57)
        | otherwise           = fromIntegral (w - 0x37)
 
