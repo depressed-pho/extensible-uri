@@ -6,6 +6,7 @@
   , ScopedTypeVariables
   , UnicodeSyntax
   #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Data.URI.Internal.Host
     ( Host(..)
     , parser
@@ -63,6 +64,11 @@ data Host
     | RegName     !(CI Text)
     deriving (Eq, Ord, Typeable)
 
+-- |For testing purpose only.
+deriving instance Show Host
+--instance Show Host where
+--    show = FIXME
+
 instance FoldCase Host where
     {-# INLINEABLE foldCase #-}
     foldCase (IPv4Address w  ) = IPv4Address w
@@ -115,7 +121,7 @@ pIPvFuture = do _   ← char 'v'
 
 pIPv6Addrz ∷ Parser Host
 {-# INLINEABLE pIPv6Addrz #-}
-pIPv6Addrz = (IPv6Address <$> pIPv6Addr ⊛ (char '%' *> optional pZoneID))
+pIPv6Addrz = (IPv6Address <$> pIPv6Addr ⊛ optional (char '%' *> pZoneID))
              <?>
              "IPv6addrz"
 
