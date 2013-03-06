@@ -11,15 +11,20 @@ module Data.URI.Internal.Host
     ( Host(..)
     , parser
     , fromByteString
+    , toBuilder
     )
     where
+import Blaze.ByteString.Builder (Builder)
+import qualified Blaze.ByteString.Builder.ByteString as BB
+import qualified Blaze.ByteString.Builder.Char8 as BB
+import qualified Blaze.Text as BB
 import qualified Codec.URI.PercentEncoding as PE
 import Control.Applicative
 import Control.Applicative.Unicode hiding ((∅))
 import Control.DeepSeq
 import qualified Data.Attoparsec as B
 import Control.Failure
-import Data.Attoparsec.Char8
+import Data.Attoparsec.Char8 as C
 import Data.Bits
 import Data.CaseInsensitive as CI
 import qualified Data.List as L
@@ -30,7 +35,7 @@ import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Typeable
 import Data.URI.Internal
-import qualified Data.Vector.Generic as GV
+import Data.Vector.Generic as GV
 import qualified Data.Vector.Unboxed as UV
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
 import Data.Vector.Storable.ByteString.Legacy
@@ -140,7 +145,7 @@ pIPv6Addr = choice
                  pure $ (∅) `pad` x ⊕ y
 
             , -- [               h16 ] "::" 4( h16 ":" ) ls32
-              do x ← option (∅) (GV.singleton <$> h16)
+              do x ← option (∅) (singleton <$> h16)
                  _ ← string "::"
                  y ← countV 4 (h16 <* char ':')
                  z ← ls32
@@ -148,7 +153,7 @@ pIPv6Addr = choice
 
             , -- [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 1 (h16 <* char ':') ⊛ h16)
+                       (snoc <$> countUpToV 1 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← countV 3 (h16 <* char ':')
                  z ← ls32
@@ -156,7 +161,7 @@ pIPv6Addr = choice
 
             , -- [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 2 (h16 <* char ':') ⊛ h16)
+                       (snoc <$> countUpToV 2 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← countV 2 (h16 <* char ':')
                  z ← ls32
@@ -164,29 +169,29 @@ pIPv6Addr = choice
 
             , -- [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 3 (h16 <* char ':') ⊛ h16)
+                       (snoc <$> countUpToV 3 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← h16 <* char ':'
                  z ← ls32
-                 pure $ x `pad` (y `GV.cons` z)
+                 pure $ x `pad` (y `cons` z)
 
             , -- [ *4( h16 ":" ) h16 ] "::"              ls32
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 4 (h16 <* char ':') ⊛ h16)
+                       (snoc <$> countUpToV 4 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← ls32
                  pure $ x `pad` y
 
             , -- [ *5( h16 ":" ) h16 ] "::"              h16
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 5 (h16 <* char ':') ⊛ h16)
+                       (snoc <$> countUpToV 5 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  y ← h16
                  pure $ x `pad` GV.singleton y
 
             , -- [ *6( h16 ":" ) h16 ] "::"
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 6 (h16 <* char ':') ⊛ h16)
+                       (snoc <$> countUpToV 6 (h16 <* char ':') ⊛ h16)
                  _ ← string "::"
                  pure $ x `pad` (∅)
             ]
@@ -214,8 +219,8 @@ pIPv6Addr = choice
       repack ∷ GV.Vector v' Word8 ⇒ v' Word8 → v Word16
       {-# INLINEABLE repack #-}
       repack v = GV.fromList
-                 [ (fromIntegral (v GV.! 0) `shiftL` 8) .|. fromIntegral (v GV.! 1)
-                 , (fromIntegral (v GV.! 2) `shiftL` 8) .|. fromIntegral (v GV.! 3)
+                 [ (fromIntegral (v ! 0) `shiftL` 8) .|. fromIntegral (v ! 1)
+                 , (fromIntegral (v ! 2) `shiftL` 8) .|. fromIntegral (v ! 3)
                  ]
 
       pad ∷ v Word16 → v Word16 → v Word16
@@ -226,7 +231,7 @@ pIPv6Addr = choice
 
 pZoneID ∷ Parser (CI ByteString)
 {-# INLINEABLE pZoneID #-}
-pZoneID = do src ← takeWhile isAllowed
+pZoneID = do src ← C.takeWhile isAllowed
              case PE.decode' (fromLegacyByteString src) of
                Right dst → pure $ CI.mk dst
                Left  e   → fail $ show (e ∷ PE.DecodeError)
@@ -283,7 +288,7 @@ pIPv4Addr = do o0 ← decOctet
 
 pRegName ∷ Parser Host
 {-# INLINEABLE pRegName #-}
-pRegName = do src ← takeWhile isAllowed
+pRegName = do src ← C.takeWhile isAllowed
               case PE.decode' (fromLegacyByteString src) of
                 Right dst →
                     case T.decodeUtf8' (toLegacyByteString dst) of
@@ -306,3 +311,51 @@ fromByteString ∷ Failure String f ⇒ ByteString → f Host
 fromByteString = either failure return ∘
                  parseOnly parser      ∘
                  toLegacyByteString
+
+-- |Create a 'Builder' from a 'Host'.
+toBuilder ∷ Host → Builder
+{-# INLINEABLE toBuilder #-}
+toBuilder (IPv4Address v4  ) = v4AddrToBuilder v4
+toBuilder (IPv6Address v6 z) = v6AddrToBuilder v6 ⊕ zoneIDToBuilder z
+
+v4AddrToBuilder ∷ GV.Vector v Word8 ⇒ v Word8 → Builder
+{-# INLINEABLE v4AddrToBuilder #-}
+v4AddrToBuilder v4
+    = BB.integral (v4 ! 0) ⊕
+      BB.fromChar '.'      ⊕
+      BB.integral (v4 ! 1) ⊕
+      BB.fromChar '.'      ⊕
+      BB.integral (v4 ! 2) ⊕
+      BB.fromChar '.'      ⊕
+      BB.integral (v4 ! 3)
+
+v6AddrToBuilder ∷ (GV.Vector v Word16, Eq (v Word16)) ⇒ v Word16 → Builder
+{-# INLINEABLE v6AddrToBuilder #-}
+v6AddrToBuilder v6
+    | isKnownToBeV4Embedded v6 = v4EmbeddedV6AddrToBuilder v6
+    | otherwise                = ordinaryV6AddrToBuilder   v6
+
+isKnownToBeV4Embedded ∷ (GV.Vector v Word16, Eq (v Word16)) ⇒ v Word16 → Bool
+{-# INLINEABLE isKnownToBeV4Embedded #-}
+isKnownToBeV4Embedded v6
+    = -- RFC 4291: IPv4-mapped
+      prefix96 ≡ GV.fromList [0, 0, 0, 0, 0, 0xFFFF] ∨
+      -- RFC 6052: IPv4-translatable
+      prefix96 ≡ GV.fromList [0x64, 0xFF9B, 0, 0, 0, 0]
+    where
+      prefix96 = GV.take 6 v6
+
+v4EmbeddedV6AddrToBuilder ∷ GV.Vector v Word16 ⇒ v Word16 → Builder
+{-# INLINEABLE v4EmbeddedV6AddrToBuilder #-}
+v4EmbeddedV6AddrToBuilder _ = error "FIXME"
+
+ordinaryV6AddrToBuilder ∷ GV.Vector v Word16 ⇒ v Word16 → Builder
+{-# INLINEABLE ordinaryV6AddrToBuilder #-}
+ordinaryV6AddrToBuilder _ = error "FIXME"
+
+zoneIDToBuilder ∷ Maybe (CI ByteString) → Builder
+{-# INLINEABLE zoneIDToBuilder #-}
+zoneIDToBuilder Nothing  = (∅)
+zoneIDToBuilder (Just z)
+    = BB.fromChar '%' ⊕
+      (BB.fromByteString ∘ toLegacyByteString ∘ foldedCase) z

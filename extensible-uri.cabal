@@ -43,6 +43,7 @@ Library
         base                 == 4.*,
         base-unicode-symbols == 0.2.*,
         blaze-builder        == 0.3.*,
+        blaze-textual        == 0.2.*,
         bytestring           == 0.10.*,
         case-insensitive     == 1.0.*,
         deepseq              == 1.3.*,
@@ -68,11 +69,12 @@ Test-Suite tests
         Test.Data.URI.Host
     Build-Depends:
         HUnit                == 1.2.*,
-        base                 == 4.*,
+        base,
+        blaze-builder,
         extensible-uri,
         test-framework       == 0.8.*,
         test-framework-hunit == 0.3.*,
-        vector               == 0.10.*
+        vector
     Default-Language:
         Haskell2010
     GHC-Options:

@@ -89,9 +89,12 @@ parser = do src ← takeWhile isAllowed
                     isSubDelim   c ∨
                     ':' ≡        c
 
-isSafeInUserInfo ∷ Char → Bool
-{-# INLINE isSafeInUserInfo #-}
-isSafeInUserInfo c = isUnreserved c ∨ isSubDelim c
+-- |Try to parse an 'UserInfo' from an ascii string.
+fromByteString ∷ Failure String f ⇒ ByteString → f UserInfo
+{-# INLINE fromByteString #-}
+fromByteString = either failure return ∘
+                 parseOnly parser      ∘
+                 toLegacyByteString
 
 -- |Create a 'Builder' from an 'UserInfo'.
 toBuilder ∷ UserInfo → Builder
@@ -101,9 +104,6 @@ toBuilder = BB.fromByteString                  ∘
             PE.encode ((¬) ∘ isSafeInUserInfo) ∘
             unUserInfo
 
--- |Try to parse an 'UserInfo' from an ascii string.
-fromByteString ∷ Failure String f ⇒ ByteString → f UserInfo
-{-# INLINE fromByteString #-}
-fromByteString = either failure return ∘
-                 parseOnly parser      ∘
-                 toLegacyByteString
+isSafeInUserInfo ∷ Char → Bool
+{-# INLINE isSafeInUserInfo #-}
+isSafeInUserInfo c = isUnreserved c ∨ isSubDelim c
