@@ -15,33 +15,24 @@ module Data.URI.Internal.Host
     )
     where
 import Blaze.ByteString.Builder (Builder)
-import qualified Blaze.ByteString.Builder.ByteString as BB
-import qualified Blaze.ByteString.Builder.Char8 as BB
-import qualified Blaze.Text as BB
 import qualified Codec.URI.PercentEncoding as PE
 import Control.Applicative
 import Control.Applicative.Unicode hiding ((∅))
 import Control.DeepSeq
-import qualified Data.Attoparsec as B
 import Control.Failure
 import Data.Attoparsec.Char8 as C
-import Data.Bits
 import Data.CaseInsensitive as CI
-import qualified Data.List as L
 import Data.Hashable
-import Data.Monoid
 import Data.Monoid.Unicode
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Typeable
 import Data.URI.Internal
-import Data.Vector.Generic as GV
-import qualified Data.Vector.Unboxed as UV
+import Data.URI.Internal.Host.IPv4
+import Data.URI.Internal.Host.IPv6
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
 import Data.Vector.Storable.ByteString.Legacy
-import Data.Word (Word8, Word16)
 import Numeric.Natural
-import Prelude hiding (takeWhile)
 import Prelude.Unicode
 
 -- |The 'Host' subcomponent of authority is identified by an IP
@@ -56,10 +47,10 @@ import Prelude.Unicode
 -- <http://tools.ietf.org/html/rfc3986#section-3.2.2>
 data Host
     = -- |4-octets literal IPv4 address.
-      IPv4Address !(UV.Vector Word8)
+      IPv4Address !IPv4Addr
       -- |8 * 16-bit literal IPv6 address with optional zone ID. (See
       -- <http://tools.ietf.org/html/rfc6874>)
-    | IPv6Address !(UV.Vector Word16) !(Maybe (CI ByteString))
+    | IPv6Address !IPv6Addr !(Maybe ZoneID)
       -- |As-yet-undefined IP literal address.
     | IPvFuture   !Natural !(CI ByteString)
       -- |Registered name, which is usually intended for lookup within
@@ -115,7 +106,7 @@ pIPvFuture ∷ Parser Host
 pIPvFuture = do _   ← char 'v'
                 ver ← hexadecimal
                 _   ← char '.'
-                lit ← takeWhile1 isAllowed
+                lit ← C.takeWhile1 isAllowed
                 pure $ IPvFuture ver $ CI.mk $ fromLegacyByteString lit
              <?>
              "IPvFuture"
@@ -129,162 +120,6 @@ pIPv6Addrz ∷ Parser Host
 pIPv6Addrz = (IPv6Address <$> pIPv6Addr ⊛ optional (char '%' *> pZoneID))
              <?>
              "IPv6addrz"
-
-pIPv6Addr ∷ ∀v. (GV.Vector v Word16, Monoid (v Word16)) ⇒ Parser (v Word16)
-{-# INLINEABLE pIPv6Addr #-}
-pIPv6Addr = choice
-            [ --                            6( h16 ":" ) ls32
-              do x ← countV 6 (h16 <* char ':')
-                 y ← ls32
-                 pure $ x ⊕ y
-
-            , --                       "::" 5( h16 ":" ) ls32
-              do _ ← string "::"
-                 x ← countV 5 (h16 <* char ':')
-                 y ← ls32
-                 pure $ (∅) `pad` x ⊕ y
-
-            , -- [               h16 ] "::" 4( h16 ":" ) ls32
-              do x ← option (∅) (singleton <$> h16)
-                 _ ← string "::"
-                 y ← countV 4 (h16 <* char ':')
-                 z ← ls32
-                 pure $ x `pad` y ⊕ z
-
-            , -- [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
-              do x ← option (∅)
-                       (snoc <$> countUpToV 1 (h16 <* char ':') ⊛ h16)
-                 _ ← string "::"
-                 y ← countV 3 (h16 <* char ':')
-                 z ← ls32
-                 pure $ x `pad` y ⊕ z
-
-            , -- [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
-              do x ← option (∅)
-                       (snoc <$> countUpToV 2 (h16 <* char ':') ⊛ h16)
-                 _ ← string "::"
-                 y ← countV 2 (h16 <* char ':')
-                 z ← ls32
-                 pure $ x `pad` y ⊕ z
-
-            , -- [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
-              do x ← option (∅)
-                       (snoc <$> countUpToV 3 (h16 <* char ':') ⊛ h16)
-                 _ ← string "::"
-                 y ← h16 <* char ':'
-                 z ← ls32
-                 pure $ x `pad` (y `cons` z)
-
-            , -- [ *4( h16 ":" ) h16 ] "::"              ls32
-              do x ← option (∅)
-                       (snoc <$> countUpToV 4 (h16 <* char ':') ⊛ h16)
-                 _ ← string "::"
-                 y ← ls32
-                 pure $ x `pad` y
-
-            , -- [ *5( h16 ":" ) h16 ] "::"              h16
-              do x ← option (∅)
-                       (snoc <$> countUpToV 5 (h16 <* char ':') ⊛ h16)
-                 _ ← string "::"
-                 y ← h16
-                 pure $ x `pad` GV.singleton y
-
-            , -- [ *6( h16 ":" ) h16 ] "::"
-              do x ← option (∅)
-                       (snoc <$> countUpToV 6 (h16 <* char ':') ⊛ h16)
-                 _ ← string "::"
-                 pure $ x `pad` (∅)
-            ]
-            <?>
-            "IPv6address"
-    where
-      h16 ∷ Parser Word16
-      {-# INLINEABLE h16 #-}
-      h16 = L.foldl' step 0 <$> countUpTo1 4 (B.satisfy isHexDigit_w8)
-          where
-            step ∷ Word16 → Word8 → Word16
-            {-# INLINE step #-}
-            step a w = (a `shiftL` 4) .|. htoi w
-
-      ls32 ∷ Parser (v Word16)
-      {-# INLINEABLE ls32 #-}
-      ls32 = do x ← h16
-                y ← char ':' *> h16
-                pure $ GV.fromList [x, y]
-             <|>
-             (repack <$> (pIPv4Addr ∷ Parser (UV.Vector Word8)))
-             <?>
-             "ls32"
-
-      repack ∷ GV.Vector v' Word8 ⇒ v' Word8 → v Word16
-      {-# INLINEABLE repack #-}
-      repack v = GV.fromList
-                 [ (fromIntegral (v ! 0) `shiftL` 8) .|. fromIntegral (v ! 1)
-                 , (fromIntegral (v ! 2) `shiftL` 8) .|. fromIntegral (v ! 3)
-                 ]
-
-      pad ∷ v Word16 → v Word16 → v Word16
-      {-# INLINE pad #-}
-      pad x y = let p = GV.replicate (8 - GV.length x - GV.length y) 0
-                in
-                  x ⊕ p ⊕ y
-
-pZoneID ∷ Parser (CI ByteString)
-{-# INLINEABLE pZoneID #-}
-pZoneID = do src ← C.takeWhile isAllowed
-             case PE.decode' (fromLegacyByteString src) of
-               Right dst → pure $ CI.mk dst
-               Left  e   → fail $ show (e ∷ PE.DecodeError)
-          <?>
-          "ZoneID"
-    where
-      isAllowed ∷ Char → Bool
-      {-# INLINE isAllowed #-}
-      isAllowed c = isUnreserved c ∨ isPctEncoded c
-
-pIPv4Addr ∷ GV.Vector v Word8 ⇒ Parser (v Word8)
-{-# INLINEABLE pIPv4Addr #-}
-pIPv4Addr = do o0 ← decOctet
-               _  ← char '.'
-               o1 ← decOctet
-               _  ← char '.'
-               o2 ← decOctet
-               _  ← char '.'
-               o3 ← decOctet
-               pure $ GV.fromList [o0, o1, o2, o3]
-            <?>
-            "IPv4address"
-    where
-      decOctet ∷ Parser Word8
-      {-# INLINEABLE decOctet #-}
-      decOctet = choice
-                 [ -- 250-255
-                   do _ ← string "25"
-                      x ← atoi <$> B.satisfy (inRange_w8 '0' '5')
-                      pure $ 250 + x
-
-                   -- 200-249
-                 , do _ ← char '2'
-                      x ← atoi <$> B.satisfy (inRange_w8 '0' '4')
-                      y ← atoi <$> B.satisfy isDigit_w8
-                      pure $ 200 + 10 ⋅ x + y
-
-                   -- 100-199
-                 , do _ ← char '1'
-                      x ← atoi <$> B.satisfy isDigit_w8
-                      y ← atoi <$> B.satisfy isDigit_w8
-                      pure $ 100 + 10 ⋅ x + y
-
-                   -- 10-99
-                 , do x ← atoi <$> B.satisfy (inRange_w8 '1' '9')
-                      y ← atoi <$> B.satisfy isDigit_w8
-                      pure $ 10 ⋅ x + y
-
-                   -- 0-9
-                 , atoi <$> B.satisfy isDigit_w8
-                 ]
-                 <?>
-                 "dec-octet"
 
 pRegName ∷ Parser Host
 {-# INLINEABLE pRegName #-}
@@ -315,47 +150,5 @@ fromByteString = either failure return ∘
 -- |Create a 'Builder' from a 'Host'.
 toBuilder ∷ Host → Builder
 {-# INLINEABLE toBuilder #-}
-toBuilder (IPv4Address v4  ) = v4AddrToBuilder v4
-toBuilder (IPv6Address v6 z) = v6AddrToBuilder v6 ⊕ zoneIDToBuilder z
-
-v4AddrToBuilder ∷ GV.Vector v Word8 ⇒ v Word8 → Builder
-{-# INLINEABLE v4AddrToBuilder #-}
-v4AddrToBuilder v4
-    = BB.integral (v4 ! 0) ⊕
-      BB.fromChar '.'      ⊕
-      BB.integral (v4 ! 1) ⊕
-      BB.fromChar '.'      ⊕
-      BB.integral (v4 ! 2) ⊕
-      BB.fromChar '.'      ⊕
-      BB.integral (v4 ! 3)
-
-v6AddrToBuilder ∷ (GV.Vector v Word16, Eq (v Word16)) ⇒ v Word16 → Builder
-{-# INLINEABLE v6AddrToBuilder #-}
-v6AddrToBuilder v6
-    | isKnownToBeV4Embedded v6 = v4EmbeddedV6AddrToBuilder v6
-    | otherwise                = ordinaryV6AddrToBuilder   v6
-
-isKnownToBeV4Embedded ∷ (GV.Vector v Word16, Eq (v Word16)) ⇒ v Word16 → Bool
-{-# INLINEABLE isKnownToBeV4Embedded #-}
-isKnownToBeV4Embedded v6
-    = -- RFC 4291: IPv4-mapped
-      prefix96 ≡ GV.fromList [0, 0, 0, 0, 0, 0xFFFF] ∨
-      -- RFC 6052: IPv4-translatable
-      prefix96 ≡ GV.fromList [0x64, 0xFF9B, 0, 0, 0, 0]
-    where
-      prefix96 = GV.take 6 v6
-
-v4EmbeddedV6AddrToBuilder ∷ GV.Vector v Word16 ⇒ v Word16 → Builder
-{-# INLINEABLE v4EmbeddedV6AddrToBuilder #-}
-v4EmbeddedV6AddrToBuilder _ = error "FIXME"
-
-ordinaryV6AddrToBuilder ∷ GV.Vector v Word16 ⇒ v Word16 → Builder
-{-# INLINEABLE ordinaryV6AddrToBuilder #-}
-ordinaryV6AddrToBuilder _ = error "FIXME"
-
-zoneIDToBuilder ∷ Maybe (CI ByteString) → Builder
-{-# INLINEABLE zoneIDToBuilder #-}
-zoneIDToBuilder Nothing  = (∅)
-zoneIDToBuilder (Just z)
-    = BB.fromChar '%' ⊕
-      (BB.fromByteString ∘ toLegacyByteString ∘ foldedCase) z
+toBuilder (IPv4Address v4  ) = bIPv4Addr v4
+toBuilder (IPv6Address v6 z) = bIPv6Addr v6 ⊕ bZoneID z

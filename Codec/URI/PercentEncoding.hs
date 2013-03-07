@@ -16,6 +16,7 @@ module Codec.URI.PercentEncoding
     , DelimitedByteString
     , DecodeError(..)
     , encode
+    , encode'
     , decode
     , decode'
     )
@@ -141,6 +142,11 @@ encode ∷ (Char → Bool) → DelimitedByteString → ByteString
 {-# INLINE encode #-}
 encode isUnsafe = GV.unstream ∘ encodeStream isUnsafe ∘ GV.stream
 
+-- |A version of 'encode' that encodes an input with no delimiters.
+encode' ∷ (Char → Bool) → ByteString → ByteString
+{-# INLINE encode' #-}
+encode' = (∘ literal) ∘ encode
+
 -- |Decode a percent-encoded ascii string to 'DelimitedByteString'
 -- using a predicate to determine which non-encoded letters should be
 -- considered to be delimiters. Note that encoded octets are always
@@ -167,6 +173,10 @@ homogenise = GV.unstream ∘ PS.map hom' ∘ GV.stream
       {-# INLINE hom' #-}
       hom' (Delimiter w) = w
       hom' (Literal   w) = w
+
+literal ∷ ByteString → DelimitedByteString
+{-# INLINE literal #-}
+literal = GV.unstream ∘ PS.map Literal ∘ GV.stream
 
 mstream ∷ (Monad m, GV.Vector v α) ⇒ v α → Stream m α
 {-# INLINE mstream #-}

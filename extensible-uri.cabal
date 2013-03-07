@@ -33,6 +33,8 @@ Library
         Data.URI
         Data.URI.Internal
         Data.URI.Internal.Host
+        Data.URI.Internal.Host.IPv4
+        Data.URI.Internal.Host.IPv6
         Data.URI.Internal.Scheme
         Data.URI.Internal.UserInfo
     if flag(QuickCheck)
@@ -66,7 +68,7 @@ Test-Suite tests
     Main-Is:        Main.hs
     Hs-Source-Dirs: tests
     Other-Modules:
-        Test.Data.URI.Host
+        Test.Data.URI.Internal.Host
     Build-Depends:
         HUnit                == 1.2.*,
         base,

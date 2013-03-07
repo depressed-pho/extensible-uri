@@ -2,7 +2,7 @@
     OverloadedStrings
   , UnicodeSyntax
   #-}
-module Test.Data.URI.Host (tests)
+module Test.Data.URI.Internal.Host (tests)
     where
 import qualified Blaze.ByteString.Builder as BB
 import Data.URI.Internal.Host
