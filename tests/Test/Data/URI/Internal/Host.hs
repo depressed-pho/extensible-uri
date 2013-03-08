@@ -40,5 +40,15 @@ tests = [ testGroup "parser"
               @=?
               BB.toByteString (toBuilder (IPv4Address (GV.fromList [1,2,3,4])))
             )
+          , testCase "example IPv6address"
+            ( "[::1]"
+              @=?
+              BB.toByteString (toBuilder (IPv6Address (GV.fromList [0,0,0,0,0,0,0,1]) Nothing))
+            )
+          , testCase "example v4-mapped IPv6address"
+            ( "[::ffff:127.0.0.1]"
+              @=?
+              BB.toByteString (toBuilder (IPv6Address (GV.fromList [0,0,0,0,0,0xFFFF,0x7F00,0x0001]) Nothing))
+            )
           ]
         ]

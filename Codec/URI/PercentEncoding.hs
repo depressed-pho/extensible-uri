@@ -203,7 +203,7 @@ encodeStream isUnsafe (Stream step (s0 ∷ s) sz)
               Nothing → Unknown
 
       go ∷ EncState s → m (Step (EncState s) Word8)
-      {-# INLINE go #-}
+      {-# INLINEABLE go #-}
       go (EInitial s)
           = do r ← step s
                case r of
@@ -229,7 +229,7 @@ decodeStream isDelim (Stream step (s0 ∷ s) sz)
     = Stream go (DInitial s0) (toMax sz)
     where
       go ∷ DecState s → f (Step (DecState s) DelimitableOctet)
-      {-# INLINE go #-}
+      {-# INLINEABLE go #-}
       go (DInitial s)
           = do r ← step s
                case r of

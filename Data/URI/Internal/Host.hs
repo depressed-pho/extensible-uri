@@ -15,6 +15,7 @@ module Data.URI.Internal.Host
     )
     where
 import Blaze.ByteString.Builder (Builder)
+import qualified Blaze.ByteString.Builder.Char8 as BB
 import qualified Codec.URI.PercentEncoding as PE
 import Control.Applicative
 import Control.Applicative.Unicode hiding ((∅))
@@ -151,4 +152,7 @@ fromByteString = either failure return ∘
 toBuilder ∷ Host → Builder
 {-# INLINEABLE toBuilder #-}
 toBuilder (IPv4Address v4  ) = bIPv4Addr v4
-toBuilder (IPv6Address v6 z) = bIPv6Addr v6 ⊕ bZoneID z
+toBuilder (IPv6Address v6 z) = BB.fromChar '[' ⊕
+                               bIPv6Addr v6    ⊕
+                               bZoneID z       ⊕
+                               BB.fromChar ']'

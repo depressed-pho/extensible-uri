@@ -1,5 +1,6 @@
 {-# LANGUAGE
-    FlexibleInstances
+    BangPatterns
+  , FlexibleInstances
   , ScopedTypeVariables
   , UnicodeSyntax
   #-}
@@ -19,8 +20,13 @@ module Data.URI.Internal
     , countUpTo
     , countUpTo1
     , finishOff
+
+    , bHex
     )
     where
+import Blaze.ByteString.Builder (Builder, Write)
+import qualified Blaze.ByteString.Builder as BB
+import qualified Blaze.ByteString.Builder.Char8 as BB
 import Control.Applicative
 import Control.Applicative.Unicode
 import Control.DeepSeq
@@ -29,15 +35,18 @@ import Control.Monad.Primitive
 import Control.Monad.Unicode
 import qualified Data.Attoparsec as B
 import Data.Attoparsec.Char8
-import Data.Vector.Storable.ByteString.Internal (c2w)
+import Data.Bits
 import Data.CaseInsensitive
 import Data.Char
 import Data.Hashable
+import Data.Maybe
+import Data.Monoid.Unicode
 import Data.Vector.Fusion.Util
 import qualified Data.Vector.Generic as GV
 import qualified Data.Vector.Storable as SV
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
 import qualified Data.Vector.Storable.ByteString.Char8 as C8
+import Data.Vector.Storable.ByteString.Internal (c2w)
 import qualified Data.Vector.Unboxed as UV
 import Data.Word
 import Foreign.ForeignPtr
@@ -96,6 +105,22 @@ countUpTo1 n p = (:) <$> p ⊛ countUpTo (n-1) p
 finishOff ∷ Parser α → Parser α
 {-# INLINE finishOff #-}
 finishOff = ((endOfInput *>) ∘ pure =≪)
+
+bHex ∷ ∀n. (Integral n, Bits n) ⇒ n → Builder
+{-# INLINE bHex #-}
+bHex = BB.fromWrite ∘ fromMaybe (BB.writeChar '0') ∘ go Nothing
+    where
+      go ∷ Maybe Write → n → Maybe Write
+      {-# INLINEABLE go #-}
+      go !w  0 = w
+      go !w !n = go (Just (BB.writeWord8 hex) ⊕ w) (n `shiftR` 4)
+          where
+            nibble ∷ Word8
+            nibble = fromIntegral n .&. 0xF
+
+            hex ∷ Word8
+            hex | nibble < 10 = 0x30 + nibble
+                | otherwise   = 0x57 + nibble
 
 -- FIXME: Remove this when the vector starts providing Hashable
 -- instances.
