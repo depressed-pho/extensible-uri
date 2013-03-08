@@ -107,7 +107,7 @@ pIPvFuture = do _   ← char 'v'
                 ver ← hexadecimal
                 _   ← char '.'
                 lit ← C.takeWhile1 isAllowed
-                pure $ IPvFuture ver $ CI.mk $ fromLegacyByteString lit
+                pure ∘ IPvFuture ver ∘ CI.mk $ fromLegacyByteString lit
              <?>
              "IPvFuture"
     where

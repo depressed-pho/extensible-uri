@@ -1,6 +1,5 @@
 {-# LANGUAGE
-    FlexibleContexts
-  , OverloadedStrings
+    OverloadedStrings
   , UnicodeSyntax
   #-}
 module Data.URI.Internal.Host.IPv4
@@ -24,7 +23,7 @@ import Prelude.Unicode
 
 type IPv4Addr = UV.Vector Word8
 
-pIPv4Addr ∷ GV.Vector v Word8 ⇒ Parser (v Word8)
+pIPv4Addr ∷ Parser IPv4Addr
 {-# INLINEABLE pIPv4Addr #-}
 pIPv4Addr = do o0 ← decOctet
                _  ← char '.'
@@ -68,7 +67,7 @@ pIPv4Addr = do o0 ← decOctet
                  <?>
                  "dec-octet"
 
-bIPv4Addr ∷ GV.Vector v Word8 ⇒ v Word8 → Builder
+bIPv4Addr ∷ IPv4Addr → Builder
 {-# INLINEABLE bIPv4Addr #-}
 bIPv4Addr v4
     = BB.integral (v4 ! 0) ⊕
