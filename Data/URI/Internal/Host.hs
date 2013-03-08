@@ -15,7 +15,9 @@ module Data.URI.Internal.Host
     )
     where
 import Blaze.ByteString.Builder (Builder)
+import qualified Blaze.ByteString.Builder.ByteString as BB
 import qualified Blaze.ByteString.Builder.Char8 as BB
+import qualified Blaze.Text as BB
 import qualified Codec.URI.PercentEncoding as PE
 import Control.Applicative
 import Control.Applicative.Unicode hiding ((∅))
@@ -151,8 +153,35 @@ fromByteString = either failure return ∘
 -- |Create a 'Builder' from a 'Host'.
 toBuilder ∷ Host → Builder
 {-# INLINEABLE toBuilder #-}
-toBuilder (IPv4Address v4  ) = bIPv4Addr v4
-toBuilder (IPv6Address v6 z) = BB.fromChar '[' ⊕
-                               bIPv6Addr v6    ⊕
-                               bZoneID z       ⊕
-                               BB.fromChar ']'
+
+toBuilder (IPv4Address v4)
+    = bIPv4Addr v4
+
+toBuilder (IPv6Address v6 z)
+    = BB.fromChar '[' ⊕
+      bIPv6Addr v6    ⊕
+      bZoneID z       ⊕
+      BB.fromChar ']'
+
+toBuilder (IPvFuture v lit)
+    = BB.fromChar '[' ⊕
+      BB.fromChar 'v' ⊕
+      BB.integral v   ⊕
+      BB.fromChar '.' ⊕
+      (BB.fromByteString ∘ toLegacyByteString ∘ foldedCase) lit ⊕
+      BB.fromChar ']'
+
+toBuilder (RegName r) = bRegName r
+    where
+      bRegName ∷ CI Text → Builder
+      {-# INLINEABLE bRegName #-}
+      bRegName = BB.fromByteString                  ∘
+                 toLegacyByteString                 ∘
+                 PE.encode' ((¬) ∘ isSafeInRegName) ∘
+                 fromLegacyByteString               ∘
+                 T.encodeUtf8                       ∘
+                 foldedCase
+
+      isSafeInRegName ∷ Char → Bool
+      {-# INLINEABLE isSafeInRegName #-}
+      isSafeInRegName c = isUnreserved c ∨ isSubDelim c

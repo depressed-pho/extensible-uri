@@ -31,7 +31,7 @@ tests = [ testGroup "parser"
           , testCase "example reg-name"
             ( Right (RegName "cielonegro.org")
               @=?
-              (fromByteString "cielonegro.org" ∷ Either String Host)
+              (fromByteString "CieloNegro.org" ∷ Either String Host)
             )
           ]
         , testGroup "builder"
@@ -49,6 +49,11 @@ tests = [ testGroup "parser"
             ( "[::ffff:127.0.0.1]"
               @=?
               BB.toByteString (toBuilder (IPv6Address (GV.fromList [0,0,0,0,0,0xFFFF,0x7F00,0x0001]) Nothing))
+            )
+          , testCase "example reg-name"
+            ( "cielonegro.org"
+              @=?
+              BB.toByteString (toBuilder (RegName "CieloNegro.org"))
             )
           ]
         ]
