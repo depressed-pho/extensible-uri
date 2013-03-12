@@ -77,10 +77,6 @@ newtype ZoneID = ZoneID { unZoneID ∷ ByteString }
              , Semigroup
              , Ord
              , Typeable
-#if defined(MIN_VERSION_QuickCheck)
-             , Arbitrary
-             , CoArbitrary
-#endif
              )
 
 data CompressedWord16
@@ -107,7 +103,7 @@ instance Show ZoneID where
 instance IsString ZoneID where
     {-# INLINEABLE fromString #-}
     fromString (toLegacyByteString ∘ C8.pack → str)
-        = case parseOnly pZoneID str of
+        = case parseOnly (finishOff pZoneID) str of
             Right s → s
             Left  e → error e
 
@@ -260,7 +256,7 @@ pIPv6Addr = IPv6Addr <$>
 
 pZoneID ∷ Parser ZoneID
 {-# INLINEABLE pZoneID #-}
-pZoneID = do src ← C.takeWhile isAllowed
+pZoneID = do src ← C.takeWhile1 isAllowed
              case PE.decode' (fromLegacyByteString src) of
                Right dst → pure ∘ ZoneID $ dst
                Left  e   → fail $ show (e ∷ PE.DecodeError)
@@ -367,4 +363,10 @@ instance Arbitrary IPv6Addr where
 
 instance CoArbitrary IPv6Addr where
     coarbitrary = coarbitrary ∘ GV.toList ∘ unIPv6Addr
+
+instance Arbitrary ZoneID where
+    arbitrary = fromString <$> listOf1 (arbitrary `suchThat` isUnreserved)
+
+instance CoArbitrary ZoneID where
+    coarbitrary = coarbitrary ∘ C8.unpack ∘ unZoneID
 #endif

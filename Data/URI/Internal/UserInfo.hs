@@ -64,7 +64,7 @@ instance Show UserInfo where
 instance IsString UserInfo where
     {-# INLINEABLE fromString #-}
     fromString (toLegacyByteString ∘ C8.pack → str)
-        = case parseOnly parser str of
+        = case parseOnly (finishOff parser) str of
             Right s → s
             Left  e → error e
 

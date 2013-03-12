@@ -26,6 +26,11 @@ tests = [ testGroup "parser"
               @=?
               (fromByteString "[::1]" ∷ Either String Host)
             )
+          , testCase "example IPv6address with zone ID"
+            ( Right (IPv6Address (IPv6Addr $ GV.fromList [0,0,0,0,0,0,0,1]) (Just "lo0"))
+              @=?
+              (fromByteString "[::1%25lo0]" ∷ Either String Host)
+            )
           , testCase "example v4-mapped IPv6address"
             ( Right (IPv6Address (IPv6Addr $ GV.fromList [0,0,0,0,0,0xFFFF,0x7F00,0x0001]) Nothing)
               @=?
@@ -47,6 +52,11 @@ tests = [ testGroup "parser"
             ( "[::1]"
               @=?
               BB.toByteString (toBuilder $ IPv6Address (IPv6Addr $ GV.fromList [0,0,0,0,0,0,0,1]) Nothing)
+            )
+          , testCase "example IPv6address with zone ID"
+            ( "[::1%25lo0]"
+              @=?
+              BB.toByteString (toBuilder $ IPv6Address (IPv6Addr $ GV.fromList [0,0,0,0,0,0,0,1]) (Just "lo0"))
             )
           , testCase "example v4-mapped IPv6address"
             ( "[::ffff:127.0.0.1]"
