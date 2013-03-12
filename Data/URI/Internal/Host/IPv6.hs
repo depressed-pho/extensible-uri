@@ -72,7 +72,6 @@ newtype ZoneID = ZoneID { unZoneID ∷ ByteString }
     deriving ( Eq
              , FoldCase
              , Hashable
-             , Monoid
              , NFData
              , Semigroup
              , Ord
@@ -365,7 +364,10 @@ instance CoArbitrary IPv6Addr where
     coarbitrary = coarbitrary ∘ GV.toList ∘ unIPv6Addr
 
 instance Arbitrary ZoneID where
-    arbitrary = fromString <$> listOf1 (arbitrary `suchThat` isUnreserved)
+    arbitrary = ZoneID ∘ C8.pack <$> xs
+        where
+          p c = c ≥ '\x00' ∧ c ≤ '\xFF'
+          xs  = listOf1 (arbitrary `suchThat` p)
 
 instance CoArbitrary ZoneID where
     coarbitrary = coarbitrary ∘ C8.unpack ∘ unZoneID
