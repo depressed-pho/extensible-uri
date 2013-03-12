@@ -29,6 +29,7 @@ import Data.Bits
 import Data.ByteString.Internal (w2c)
 import Data.Hashable
 import Data.Monoid.Unicode
+import Data.Semigroup (Semigroup(..))
 import Data.String
 import Data.Typeable
 import Data.Vector.Storable.ByteString (ByteString)
@@ -103,6 +104,10 @@ instance CoArbitrary (UV.Vector DelimitableOctet) where
 -- |FIXME: doc
 type DelimitedByteString
     = UV.Vector DelimitableOctet
+
+instance Semigroup DelimitedByteString where
+    {-# INLINE CONLIKE (<>) #-}
+    (<>) = (⊕)
 
 data EncState s
     = EInitial   !s

@@ -14,46 +14,46 @@ import Test.HUnit ((@=?))
 tests ∷ [Test]
 tests = [ testGroup "parser"
           [ testCase "example IPv4address"
-            ( Right (IPv4Address (GV.fromList [1,2,3,4]))
+            ( Right (IPv4Address $ IPv4Addr $ GV.fromList [1,2,3,4])
               @=?
               (fromByteString "1.2.3.4" ∷ Either String Host)
             )
           , testCase "example IPv6address"
-            ( Right (IPv6Address (GV.fromList [0,0,0,0,0,0,0,1]) Nothing)
+            ( Right (IPv6Address (IPv6Addr $ GV.fromList [0,0,0,0,0,0,0,1]) Nothing)
               @=?
               (fromByteString "[::1]" ∷ Either String Host)
             )
           , testCase "example v4-mapped IPv6address"
-            ( Right (IPv6Address (GV.fromList [0,0,0,0,0,0xFFFF,0x7F00,0x0001]) Nothing)
+            ( Right (IPv6Address (IPv6Addr $ GV.fromList [0,0,0,0,0,0xFFFF,0x7F00,0x0001]) Nothing)
               @=?
               (fromByteString "[::ffff:127.0.0.1]" ∷ Either String Host)
             )
           , testCase "example reg-name"
             ( Right (RegName "cielonegro.org")
               @=?
-              (fromByteString "CieloNegro.org" ∷ Either String Host)
+              (fromByteString "cielonegro.org" ∷ Either String Host)
             )
           ]
         , testGroup "builder"
           [ testCase "example IPv4address"
             ( "1.2.3.4"
               @=?
-              BB.toByteString (toBuilder (IPv4Address (GV.fromList [1,2,3,4])))
+              BB.toByteString (toBuilder $ IPv4Address $ IPv4Addr $ GV.fromList [1,2,3,4])
             )
           , testCase "example IPv6address"
             ( "[::1]"
               @=?
-              BB.toByteString (toBuilder (IPv6Address (GV.fromList [0,0,0,0,0,0,0,1]) Nothing))
+              BB.toByteString (toBuilder $ IPv6Address (IPv6Addr $ GV.fromList [0,0,0,0,0,0,0,1]) Nothing)
             )
           , testCase "example v4-mapped IPv6address"
             ( "[::ffff:127.0.0.1]"
               @=?
-              BB.toByteString (toBuilder (IPv6Address (GV.fromList [0,0,0,0,0,0xFFFF,0x7F00,0x0001]) Nothing))
+              BB.toByteString (toBuilder $ IPv6Address (IPv6Addr $ GV.fromList [0,0,0,0,0,0xFFFF,0x7F00,0x0001]) Nothing)
             )
           , testCase "example reg-name"
             ( "cielonegro.org"
               @=?
-              BB.toByteString (toBuilder (RegName "CieloNegro.org"))
+              BB.toByteString (toBuilder (RegName "cielonegro.org"))
             )
           ]
         ]

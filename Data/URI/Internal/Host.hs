@@ -6,16 +6,18 @@
   , ScopedTypeVariables
   , UnicodeSyntax
   #-}
-{-# LANGUAGE StandaloneDeriving #-}
 module Data.URI.Internal.Host
     ( Host(..)
+    , IPv4Addr(..)
+    , IPv6Addr(..)
+    , ZoneID(..)
     , parser
     , fromByteString
     , toBuilder
     )
     where
 import Blaze.ByteString.Builder (Builder)
-import qualified Blaze.ByteString.Builder.ByteString as BB
+import qualified Blaze.ByteString.Builder as BB
 import qualified Blaze.ByteString.Builder.Char8 as BB
 import qualified Blaze.Text as BB
 import qualified Codec.URI.PercentEncoding as PE
@@ -34,17 +36,22 @@ import Data.URI.Internal
 import Data.URI.Internal.Host.IPv4
 import Data.URI.Internal.Host.IPv6
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
+import qualified Data.Vector.Storable.ByteString.Char8 as C8
 import Data.Vector.Storable.ByteString.Legacy
 import Numeric.Natural
 import Prelude.Unicode
+#if defined(MIN_VERSION_QuickCheck)
+import Test.QuickCheck.Arbitrary
+import Test.QuickCheck.Gen
+#endif
 
 -- |The 'Host' subcomponent of authority is identified by an IP
 -- literal encapsulated within square brackets, an IPv4 address in
 -- dotted-decimal form, or a registered name. The host subcomponent is
 -- case-insensitive. The presence of a host subcomponent within a URI
 -- does not imply that the scheme requires access to the given host on
--- the Internet. In many cases, the host syntax is used only for the
--- sake of reusing the existing registration process created and
+-- the Internet. In many cases, the host subcomponent is used only for
+-- the sake of reusing the existing registration process created and
 -- deployed for DNS, thus obtaining a globally unique name without the
 -- cost of deploying another registry. See:
 -- <http://tools.ietf.org/html/rfc3986#section-3.2.2>
@@ -53,7 +60,7 @@ data Host
       IPv4Address !IPv4Addr
       -- |8 * 16-bit literal IPv6 address with optional zone ID. (See
       -- <http://tools.ietf.org/html/rfc6874>)
-    | IPv6Address !IPv6Addr !(Maybe ZoneID)
+    | IPv6Address !IPv6Addr !(Maybe (CI ZoneID))
       -- |As-yet-undefined IP literal address.
     | IPvFuture   !Natural !(CI ByteString)
       -- |Registered name, which is usually intended for lookup within
@@ -64,28 +71,27 @@ data Host
     deriving (Eq, Ord, Typeable)
 
 -- |For testing purpose only.
-deriving instance Show Host
---instance Show Host where
---    show = FIXME
+instance Show Host where
+    show = C8.unpack ∘ fromLegacyByteString ∘ BB.toByteString ∘ toBuilder
 
 instance FoldCase Host where
     {-# INLINEABLE foldCase #-}
-    foldCase (IPv4Address w  ) = IPv4Address w
-    foldCase (IPv6Address w s) = IPv6Address w (foldCase <$> s)
+    foldCase (IPv4Address a  ) = IPv4Address a
+    foldCase (IPv6Address a z) = IPv6Address a (foldCase <$> z)
     foldCase (IPvFuture   v a) = IPvFuture   v (foldCase a)
     foldCase (RegName     n  ) = RegName       (foldCase n)
 
 instance Hashable Host where
     {-# INLINEABLE hashWithSalt #-}
-    hashWithSalt salt (IPv4Address w  ) = salt `hashWithSalt` w
-    hashWithSalt salt (IPv6Address w s) = salt `hashWithSalt` w `hashWithSalt` s
+    hashWithSalt salt (IPv4Address a  ) = salt `hashWithSalt` a
+    hashWithSalt salt (IPv6Address a z) = salt `hashWithSalt` a `hashWithSalt` z
     hashWithSalt salt (IPvFuture   v a) = salt `hashWithSalt` v `hashWithSalt` a
     hashWithSalt salt (RegName     n  ) = salt `hashWithSalt` n
 
 instance NFData Host where
     {-# INLINEABLE rnf #-}
-    rnf (IPv4Address w  ) = rnf w
-    rnf (IPv6Address w s) = rnf w `seq` rnf s
+    rnf (IPv4Address a  ) = rnf a
+    rnf (IPv6Address a z) = rnf a `seq` rnf z
     rnf (IPvFuture   v a) = rnf v `seq` rnf a
     rnf (RegName     n  ) = rnf n
 
@@ -120,7 +126,7 @@ pIPvFuture = do _   ← char 'v'
 
 pIPv6Addrz ∷ Parser Host
 {-# INLINEABLE pIPv6Addrz #-}
-pIPv6Addrz = (IPv6Address <$> pIPv6Addr ⊛ optional (char '%' *> pZoneID))
+pIPv6Addrz = (IPv6Address <$> pIPv6Addr ⊛ optional ("%25" .*> (CI.mk <$> pZoneID)))
              <?>
              "IPv6addrz"
 
@@ -160,8 +166,12 @@ toBuilder (IPv4Address v4)
 toBuilder (IPv6Address v6 z)
     = BB.fromChar '[' ⊕
       bIPv6Addr v6    ⊕
-      bZoneID z       ⊕
+      bMaybeZoneID z  ⊕
       BB.fromChar ']'
+    where
+      bMaybeZoneID ∷ Maybe (CI ZoneID) → Builder
+      {-# INLINEABLE bMaybeZoneID #-}
+      bMaybeZoneID = maybe (∅) ((BB.copyByteString "%25" ⊕) ∘ bZoneID ∘ CI.foldedCase)
 
 toBuilder (IPvFuture v lit)
     = BB.fromChar '[' ⊕
@@ -185,3 +195,25 @@ toBuilder (RegName r) = bRegName r
       isSafeInRegName ∷ Char → Bool
       {-# INLINEABLE isSafeInRegName #-}
       isSafeInRegName c = isUnreserved c ∨ isSubDelim c
+
+#if defined(MIN_VERSION_QuickCheck)
+instance Arbitrary Host where
+    arbitrary = oneof [ IPv4Address <$> arbitrary
+                      , IPv6Address <$> arbitrary ⊛ arbitrary
+                      , IPvFuture   <$> arbitrary ⊛ arbitrary
+                      , RegName     <$> arbitrary
+                      ]
+
+    shrink (IPv4Address a  ) = IPv4Address <$> shrink a
+    shrink (IPv6Address a z) = [ IPv6Address a' z  | a' ← shrink a ] ⊕
+                               [ IPv6Address a  z' | z' ← shrink z ]
+    shrink (IPvFuture   v a) = [ IPvFuture   v' a  | v' ← shrink v ] ⊕
+                               [ IPvFuture   v  a' | a' ← shrink a ]
+    shrink (RegName     n  ) = RegName <$> shrink n
+
+instance CoArbitrary Host where
+    coarbitrary (IPv4Address a  ) = coarbitrary a
+    coarbitrary (IPv6Address a z) = coarbitrary a >< coarbitrary z
+    coarbitrary (IPvFuture   v a) = coarbitrary v >< coarbitrary a
+    coarbitrary (RegName     n  ) = coarbitrary n
+#endif

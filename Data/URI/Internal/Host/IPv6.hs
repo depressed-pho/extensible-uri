@@ -1,5 +1,9 @@
 {-# LANGUAGE
     BangPatterns
+  , CPP
+  , DeriveDataTypeable
+  , FlexibleContexts
+  , GeneralizedNewtypeDeriving
   , LambdaCase
   , MultiParamTypeClasses
   , OverloadedStrings
@@ -7,10 +11,11 @@
   , TemplateHaskell
   , TypeFamilies
   , UnicodeSyntax
+  , ViewPatterns
   #-}
 module Data.URI.Internal.Host.IPv6
-    ( IPv6Addr
-    , ZoneID
+    ( IPv6Addr(..)
+    , ZoneID(..)
 
     , pIPv6Addr
     , pZoneID
@@ -25,27 +30,58 @@ import qualified Blaze.ByteString.Builder.Char8 as BB
 import qualified Codec.URI.PercentEncoding as PE
 import Control.Applicative
 import Control.Applicative.Unicode hiding ((∅))
+import Control.DeepSeq
 import qualified Data.Attoparsec as B
 import Data.Attoparsec.Char8 as C hiding (Done)
 import Data.Bits
-import Data.CaseInsensitive as CI
+import Data.CaseInsensitive
+import Data.Hashable
 import qualified Data.List as L
+import Data.Monoid
 import Data.Monoid.Unicode
+import Data.Semigroup (Semigroup)
+import Data.String
+import Data.Typeable
 import Data.URI.Internal
 import Data.URI.Internal.Host.IPv4
 import Data.Vector.Fusion.Stream.Monadic
 import Data.Vector.Fusion.Stream.Size
 import Data.Vector.Generic as GV
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
+import qualified Data.Vector.Storable.ByteString.Char8 as C8
 import Data.Vector.Storable.ByteString.Legacy
 import qualified Data.Vector.Unboxed as UV
 import Data.Vector.Unboxed.Deriving (derivingUnbox)
 import Data.Word (Word8, Word16)
 import Numeric.Natural
 import Prelude.Unicode
+#if defined(MIN_VERSION_QuickCheck)
+import Test.QuickCheck.Arbitrary
+import Test.QuickCheck.Gen
+#endif
 
-type IPv6Addr = UV.Vector Word16
-type ZoneID   = CI ByteString
+newtype IPv6Addr = IPv6Addr { unIPv6Addr ∷ UV.Vector Word16 }
+    deriving ( Eq
+             , Hashable
+             , NFData
+             , Ord
+             , Typeable
+             )
+
+newtype ZoneID = ZoneID { unZoneID ∷ ByteString }
+    deriving ( Eq
+             , FoldCase
+             , Hashable
+             , Monoid
+             , NFData
+             , Semigroup
+             , Ord
+             , Typeable
+#if defined(MIN_VERSION_QuickCheck)
+             , Arbitrary
+             , CoArbitrary
+#endif
+             )
 
 data CompressedWord16
     = NonZero !Word16 -- ^Literal word
@@ -62,6 +98,19 @@ derivingUnbox "CompressedWord16"
          (False, n) → Zeroes  n
      |]
 
+-- |For testing purpose only.
+instance Show ZoneID where
+    show = C8.unpack ∘ PE.encode' ((¬) ∘ isUnreserved) ∘ unZoneID
+
+-- |'fromString' constructs a 'ZoneID' from a 'String'. Throws a
+-- runtime exception for invalid zone IDs.
+instance IsString ZoneID where
+    {-# INLINEABLE fromString #-}
+    fromString (toLegacyByteString ∘ C8.pack → str)
+        = case parseOnly pZoneID str of
+            Right s → s
+            Left  e → error e
+
 type CompressedIPv6Addr
     = UV.Vector CompressedWord16
 
@@ -73,7 +122,7 @@ data CompState n s
 
 compress ∷ IPv6Addr → CompressedIPv6Addr
 {-# INLINEABLE compress #-}
-compress = GV.unstream ∘ compressStream ∘ GV.stream
+compress = GV.unstream ∘ compressStream ∘ GV.stream ∘ unIPv6Addr
 
 compressStream ∷ ∀m. Monad m ⇒ Stream m Word16 → Stream m CompressedWord16
 {-# INLINE compressStream #-}
@@ -108,7 +157,8 @@ compressStream (Stream step (s0 ∷ s) sz)
 
 pIPv6Addr ∷ Parser IPv6Addr
 {-# INLINEABLE pIPv6Addr #-}
-pIPv6Addr = choice
+pIPv6Addr = IPv6Addr <$>
+            choice
             [ --                            6( h16 ":" ) ls32
               do x ← countV 6 (h16 <* char ':')
                  y ← ls32
@@ -182,7 +232,7 @@ pIPv6Addr = choice
             {-# INLINE step #-}
             step a w = (a `shiftL` 4) .|. htoi w
 
-      ls32 ∷ Parser IPv6Addr
+      ls32 ∷ GV.Vector v Word16 ⇒ Parser (v Word16)
       {-# INLINEABLE ls32 #-}
       ls32 = do x ← h16
                 y ← char ':' *> h16
@@ -194,14 +244,15 @@ pIPv6Addr = choice
 
       -- NOTE: This can be implemented using stream operations but I
       -- don't think it's worth it.
-      repack ∷ IPv4Addr → IPv6Addr
+      repack ∷ GV.Vector v Word16 ⇒ IPv4Addr → v Word16
       {-# INLINEABLE repack #-}
-      repack v = GV.fromList
-                 [ (fromIntegral (v ! 0) `shiftL` 8) .|. fromIntegral (v ! 1)
-                 , (fromIntegral (v ! 2) `shiftL` 8) .|. fromIntegral (v ! 3)
-                 ]
+      repack (IPv4Addr v4)
+          = GV.fromList
+            [ (fromIntegral (v4 ! 0) `shiftL` 8) .|. fromIntegral (v4 ! 1)
+            , (fromIntegral (v4 ! 2) `shiftL` 8) .|. fromIntegral (v4 ! 3)
+            ]
 
-      pad ∷ IPv6Addr → IPv6Addr → IPv6Addr
+      pad ∷ (GV.Vector v Word16, Monoid (v Word16)) ⇒ v Word16 → v Word16 → v Word16
       {-# INLINE pad #-}
       pad x y = let p = GV.replicate (8 - GV.length x - GV.length y) 0
                 in
@@ -211,7 +262,7 @@ pZoneID ∷ Parser ZoneID
 {-# INLINEABLE pZoneID #-}
 pZoneID = do src ← C.takeWhile isAllowed
              case PE.decode' (fromLegacyByteString src) of
-               Right dst → pure $ CI.mk dst
+               Right dst → pure ∘ ZoneID $ dst
                Left  e   → fail $ show (e ∷ PE.DecodeError)
           <?>
           "ZoneID"
@@ -230,27 +281,27 @@ bIPv6Addr v6
 
 isKnownToBeIPv4Embedded ∷ IPv6Addr → Bool
 {-# INLINEABLE isKnownToBeIPv4Embedded #-}
-isKnownToBeIPv4Embedded v6
+isKnownToBeIPv4Embedded (IPv6Addr v6)
     = -- RFC 4291: IPv4-mapped
       prefix96 ≡ GV.fromList [0, 0, 0, 0, 0, 0xFFFF] ∨
       -- RFC 6052: IPv4-translatable
       prefix96 ≡ GV.fromList [0x64, 0xFF9B, 0, 0, 0, 0]
     where
-      prefix96 ∷ IPv6Addr
-      {-# INLINEABLE prefix96 #-}
       prefix96 = GV.take 6 v6
 
 bIPv4EmbeddedV6Addr ∷ IPv6Addr → Builder
 {-# INLINEABLE bIPv4EmbeddedV6Addr #-}
-bIPv4EmbeddedV6Addr v6 = bOrdinaryIPv6Addr (GV.take 6 v6) ⊕
-                         BB.fromChar ':' ⊕
-                         bIPv4Addr (repack (GV.drop 6 v6) ∷ UV.Vector Word8)
+bIPv4EmbeddedV6Addr (IPv6Addr v6)
+    = bOrdinaryIPv6Addr (IPv6Addr $ GV.take 6 v6) ⊕
+      BB.fromChar ':'  ⊕
+      bIPv4Addr (repack $ GV.drop 6 v6)
     where
       -- NOTE: This can be implemented using stream operations but I
       -- don't think it's worth it.
-      repack ∷ IPv6Addr → IPv4Addr
+      repack ∷ GV.Vector v Word16 ⇒ v Word16 → IPv4Addr
       {-# INLINEABLE repack #-}
-      repack v = GV.fromList
+      repack v = IPv4Addr $
+                 GV.fromList
                  [ fromIntegral $ (v ! 0) `shiftR` 8
                  , fromIntegral $ (v ! 0) .&. 0xFF
                  , fromIntegral $ (v ! 1) `shiftR` 8
@@ -303,12 +354,17 @@ findPosToShorten = (snd <$>) ∘ GV.ifoldl' go Nothing
           | n > m                    = Just (n, i)
           | otherwise                = Just (m, j)
 
-bZoneID ∷ Maybe ZoneID → Builder
+bZoneID ∷ ZoneID → Builder
 {-# INLINEABLE bZoneID #-}
-bZoneID Nothing  = (∅)
-bZoneID (Just z) = BB.fromChar '%' ⊕
-                   ( BB.fromByteString               ∘
-                     toLegacyByteString              ∘
-                     PE.encode' ((¬) ∘ isUnreserved) ∘
-                     foldedCase
-                   ) z
+bZoneID = BB.fromByteString               ∘
+          toLegacyByteString              ∘
+          PE.encode' ((¬) ∘ isUnreserved) ∘
+          unZoneID
+
+#if defined(MIN_VERSION_QuickCheck)
+instance Arbitrary IPv6Addr where
+    arbitrary = IPv6Addr ∘ GV.fromList <$> vectorOf 8 arbitrary
+
+instance CoArbitrary IPv6Addr where
+    coarbitrary = coarbitrary ∘ GV.toList ∘ unIPv6Addr
+#endif

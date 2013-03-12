@@ -25,7 +25,6 @@ import Data.Attoparsec.Char8
 import Data.Data
 import Data.Hashable
 import Data.Monoid
-import Data.Monoid.Unicode
 import Data.Semigroup
 import Data.String
 import Data.URI.Internal
@@ -47,6 +46,7 @@ newtype UserInfo = UserInfo { unUserInfo ∷ DelimitedByteString }
              , Hashable
              , NFData
              , Ord
+             , Semigroup
              , Typeable
              , Monoid
 #if defined(MIN_VERSION_QuickCheck)
@@ -58,10 +58,6 @@ newtype UserInfo = UserInfo { unUserInfo ∷ DelimitedByteString }
 -- |For testing purpose only.
 instance Show UserInfo where
     show = C8.unpack ∘ PE.encode ((¬) ∘ isSafeInUserInfo) ∘ unUserInfo
-
-instance Semigroup UserInfo where
-    {-# INLINE CONLIKE (<>) #-}
-    (<>) = (⊕)
 
 -- |'fromString' constructs an 'UserInfo' from a 'String'. Throws a
 -- runtime exception for invalid userinfo.

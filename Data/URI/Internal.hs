@@ -1,5 +1,6 @@
 {-# LANGUAGE
     BangPatterns
+  , CPP
   , FlexibleInstances
   , ScopedTypeVariables
   , UnicodeSyntax
@@ -36,11 +37,14 @@ import Control.Monad.Unicode
 import qualified Data.Attoparsec as B
 import Data.Attoparsec.Char8
 import Data.Bits
-import Data.CaseInsensitive
+import Data.CaseInsensitive as CI
 import Data.Char
 import Data.Hashable
 import Data.Maybe
 import Data.Monoid.Unicode
+import Data.Semigroup
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Vector.Fusion.Util
 import qualified Data.Vector.Generic as GV
 import qualified Data.Vector.Storable as SV
@@ -53,6 +57,10 @@ import Foreign.ForeignPtr
 import Foreign.Storable
 import Numeric.Natural
 import Prelude.Unicode
+#if defined(MIN_VERSION_QuickCheck)
+import Test.QuickCheck.Arbitrary
+import Test.QuickCheck.Gen
+#endif
 
 isUnreserved ∷ Char → Bool
 {-# INLINE isUnreserved #-}
@@ -151,7 +159,7 @@ instance Hashable Natural where
 instance NFData Natural
 
 -- FIXME: Remove this when the vector-bytestring starts providing
--- FoldCase instances.
+-- FoldCase instance.
 instance FoldCase ByteString where
     {-# INLINE foldCase #-}
     foldCase = C8.map toLower
@@ -163,3 +171,55 @@ instance Applicative Id where
     pure = return
     {-# INLINE (<*>) #-}
     (<*>) = ap
+
+-- FIXME: Remove this when the vector-bytestring starts providing
+-- Semigroup instance.
+instance Semigroup ByteString where
+    {-# INLINE CONLIKE (<>) #-}
+    (<>) = (⊕)
+
+#if defined(MIN_VERSION_QuickCheck)
+-- FIXME: Remove this when the vector-bytestring starts providing
+-- Arbitrary instance.
+instance Arbitrary ByteString where
+    arbitrary = C8.pack <$> listOf arbitrary
+    shrink    = (C8.pack <$>) ∘ shrink ∘ C8.unpack
+
+-- FIXME: Remove this when the vector-bytestring starts providing
+-- CoArbitrary instance.
+instance CoArbitrary ByteString where
+    coarbitrary = coarbitrary ∘ C8.unpack
+
+-- FIXME: Remove this when the case-insensitive starts providing
+-- Arbitrary instance.
+instance (Arbitrary α, FoldCase α) ⇒ Arbitrary (CI α) where
+    arbitrary = CI.mk <$> arbitrary
+    shrink    = (CI.mk <$>) ∘ shrink ∘ CI.original
+
+-- FIXME: Remove this when the case-insensitive starts providing
+-- CoArbitrary instance.
+instance CoArbitrary α ⇒ CoArbitrary (CI α) where
+    coarbitrary = coarbitrary ∘ CI.original
+
+-- FIXME: Remove this when the nats starts providing Arbitrary
+-- instance.
+instance Arbitrary Natural where
+    arbitrary = fromInteger ∘ abs <$> arbitrary
+    shrink    = (fromInteger <$>) ∘ shrink ∘ toInteger
+
+-- FIXME: Remove this when the nats starts providing CoArbitrary
+-- instance.
+instance CoArbitrary Natural where
+    coarbitrary = coarbitrary ∘ toInteger
+
+-- FIXME: Remove this when the text starts providing Arbitrary
+-- instance.
+instance Arbitrary Text where
+    arbitrary = T.pack <$> listOf arbitrary
+    shrink    = (T.pack <$>) ∘ shrink ∘ T.unpack
+
+-- FIXME: Remove this when the text starts providing CoArbitrary
+-- instance.
+instance CoArbitrary Text where
+    coarbitrary = coarbitrary ∘ T.unpack
+#endif
