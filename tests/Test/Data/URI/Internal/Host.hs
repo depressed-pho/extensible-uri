@@ -7,14 +7,17 @@ module Test.Data.URI.Internal.Host (tests)
 import qualified Blaze.ByteString.Builder as BB
 import Data.URI.Internal.Host
 import qualified Data.Vector.Generic as GV
+import Data.Vector.Storable.ByteString.Legacy
+import Prelude.Unicode
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
+import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.HUnit ((@=?))
 
 tests ∷ [Test]
 tests = [ testGroup "parser"
           [ testCase "example IPv4address"
-            ( Right (IPv4Address $ IPv4Addr $ GV.fromList [1,2,3,4])
+            ( Right (IPv4Address ∘ IPv4Addr $ GV.fromList [1,2,3,4])
               @=?
               (fromByteString "1.2.3.4" ∷ Either String Host)
             )
@@ -38,7 +41,7 @@ tests = [ testGroup "parser"
           [ testCase "example IPv4address"
             ( "1.2.3.4"
               @=?
-              BB.toByteString (toBuilder $ IPv4Address $ IPv4Addr $ GV.fromList [1,2,3,4])
+              BB.toByteString (toBuilder ∘ IPv4Address ∘ IPv4Addr $ GV.fromList [1,2,3,4])
             )
           , testCase "example IPv6address"
             ( "[::1]"
@@ -56,4 +59,7 @@ tests = [ testGroup "parser"
               BB.toByteString (toBuilder (RegName "cielonegro.org"))
             )
           ]
+        , testProperty "round-trip" $
+          \h → (fromByteString ∘ fromLegacyByteString ∘ BB.toByteString ∘ toBuilder) h
+                 ≡ (Right h ∷ Either String Host)
         ]

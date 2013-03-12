@@ -88,8 +88,8 @@ parser = do src ← takeWhile isAllowed
 -- |Try to parse an 'UserInfo' from an ascii string.
 fromByteString ∷ Failure String f ⇒ ByteString → f UserInfo
 {-# INLINE fromByteString #-}
-fromByteString = either failure return ∘
-                 parseOnly parser      ∘
+fromByteString = either failure return        ∘
+                 parseOnly (finishOff parser) ∘
                  toLegacyByteString
 
 -- |Create a 'Builder' from an 'UserInfo'.

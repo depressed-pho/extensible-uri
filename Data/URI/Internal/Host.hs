@@ -19,7 +19,6 @@ module Data.URI.Internal.Host
 import Blaze.ByteString.Builder (Builder)
 import qualified Blaze.ByteString.Builder as BB
 import qualified Blaze.ByteString.Builder.Char8 as BB
-import qualified Blaze.Text as BB
 import qualified Codec.URI.PercentEncoding as PE
 import Control.Applicative
 import Control.Applicative.Unicode hiding ((∅))
@@ -29,6 +28,9 @@ import Data.Attoparsec.Char8 as C
 import Data.CaseInsensitive as CI
 import Data.Hashable
 import Data.Monoid.Unicode
+#if defined(MIN_VERSION_QuickCheck)
+import Data.String
+#endif
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import Data.Typeable
@@ -152,8 +154,8 @@ pRegName = do src ← C.takeWhile isAllowed
 -- |Try to parse a 'Host' from an ascii string.
 fromByteString ∷ Failure String f ⇒ ByteString → f Host
 {-# INLINE fromByteString #-}
-fromByteString = either failure return ∘
-                 parseOnly parser      ∘
+fromByteString = either failure return        ∘
+                 parseOnly (finishOff parser) ∘
                  toLegacyByteString
 
 -- |Create a 'Builder' from a 'Host'.
@@ -176,7 +178,7 @@ toBuilder (IPv6Address v6 z)
 toBuilder (IPvFuture v lit)
     = BB.fromChar '[' ⊕
       BB.fromChar 'v' ⊕
-      BB.integral v   ⊕
+      bHex v          ⊕
       BB.fromChar '.' ⊕
       (BB.fromByteString ∘ toLegacyByteString ∘ foldedCase) lit ⊕
       BB.fromChar ']'
@@ -200,15 +202,26 @@ toBuilder (RegName r) = bRegName r
 instance Arbitrary Host where
     arbitrary = oneof [ IPv4Address <$> arbitrary
                       , IPv6Address <$> arbitrary ⊛ arbitrary
-                      , IPvFuture   <$> arbitrary ⊛ arbitrary
-                      , RegName     <$> arbitrary
+                      , IPvFuture   <$> arbitrary ⊛ genIPvFuture
+                      , RegName     <$> genRegName
                       ]
+        where
+          genIPvFuture ∷ Gen (CI ByteString)
+          genIPvFuture = fromString <$> xs
+              where
+                p c = isUnreserved c ∨ isSubDelim c ∨ c ≡ ':'
+                xs  = listOf1 (arbitrary `suchThat` p)
+
+          genRegName ∷ Gen (CI Text)
+          genRegName = fromString <$> xs
+              where
+                p c = c ≢ '[' ∧ isDigit c
+                xs  = listOf (arbitrary `suchThat` p)
 
     shrink (IPv4Address a  ) = IPv4Address <$> shrink a
     shrink (IPv6Address a z) = [ IPv6Address a' z  | a' ← shrink a ] ⊕
                                [ IPv6Address a  z' | z' ← shrink z ]
-    shrink (IPvFuture   v a) = [ IPvFuture   v' a  | v' ← shrink v ] ⊕
-                               [ IPvFuture   v  a' | a' ← shrink a ]
+    shrink (IPvFuture   _ _) = []
     shrink (RegName     n  ) = RegName <$> shrink n
 
 instance CoArbitrary Host where

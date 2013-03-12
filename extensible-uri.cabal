@@ -67,16 +67,21 @@ Test-Suite tests
     Type:           exitcode-stdio-1.0
     Main-Is:        Main.hs
     Hs-Source-Dirs: tests
+    if !flag(QuickCheck)
+        Buildable: False
     Other-Modules:
         Test.Data.URI.Internal.Host
     Build-Depends:
-        HUnit                == 1.2.*,
+        HUnit                      == 1.2.*,
         base,
+        base-unicode-symbols,
         blaze-builder,
         extensible-uri,
-        test-framework       == 0.8.*,
-        test-framework-hunit == 0.3.*,
-        vector
+        test-framework             == 0.8.*,
+        test-framework-hunit       == 0.3.*,
+        test-framework-quickcheck2 == 0.3.*,
+        vector,
+        vector-bytestring
     Default-Language:
         Haskell2010
     GHC-Options:

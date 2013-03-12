@@ -28,7 +28,7 @@ import Data.Monoid.Unicode
 import Data.String
 import Data.Semigroup
 import Data.Typeable
-import Data.URI.Internal () -- for orphan instances for ByteString
+import Data.URI.Internal
 import Data.Vector.Storable.ByteString.Char8 (ByteString)
 import qualified Data.Vector.Storable.ByteString.Char8 as C8
 import Data.Vector.Storable.ByteString.Legacy
@@ -103,8 +103,8 @@ toBuilder = BB.fromByteString  ∘
 -- |Try to parse a 'Scheme' from an ascii string.
 fromByteString ∷ Failure String f ⇒ ByteString → f Scheme
 {-# INLINE fromByteString #-}
-fromByteString = either failure return ∘
-                 parseOnly parser      ∘
+fromByteString = either failure return        ∘
+                 parseOnly (finishOff parser) ∘
                  toLegacyByteString
 
 #if defined(MIN_VERSION_QuickCheck)

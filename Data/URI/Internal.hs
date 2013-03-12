@@ -76,7 +76,7 @@ isHexDigit_w8 = B.inClass "a-fA-F0-9"
 
 isSubDelim ∷ Char → Bool
 {-# INLINE isSubDelim #-}
-isSubDelim = inClass "!$&'()⋅+,;="
+isSubDelim = inClass "!$&'()*+,;="
 
 inRange_w8 ∷ Char → Char → Word8 → Bool
 {-# INLINE inRange_w8 #-}
@@ -89,9 +89,9 @@ atoi = subtract 0x30 ∘ fromIntegral
 
 htoi ∷ Integral n ⇒ Word8 → n
 {-# INLINEABLE htoi #-}
-htoi w | w ≥ 0x30 ∧ w ≤ 0x39 = fromIntegral (w - 0x30)
-       | w ≥ 0x61            = fromIntegral (w - 0x57)
-       | otherwise           = fromIntegral (w - 0x37)
+htoi w | w ≥ 0x30 ∧ w ≤ 0x39 = fromIntegral (w - 0x30) -- '0'..'9'
+       | w ≥ 0x61            = fromIntegral (w - 0x57) -- 'a'..'f'
+       | otherwise           = fromIntegral (w - 0x37) -- 'A'..'F'
 
 countV ∷ (GV.Vector v α, Functor m, Monad m) ⇒ Int → m α → m (v α)
 {-# INLINE countV #-}

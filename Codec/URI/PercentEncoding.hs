@@ -269,7 +269,7 @@ encodeHex w = ( encodeHalf $ w `shiftR` 4
       {-# INLINEABLE encodeHalf #-}
       encodeHalf h
           | h < 0x0A  = h      + 0x30 -- '0'..'9'
-          | otherwise = h - 10 + 0x65 -- 'A'..'F'
+          | otherwise = h - 10 + 0x41 -- 'A'..'F'
 
 decodeHex ∷ Failure DecodeError f ⇒ Word8 → Word8 → f Word8
 {-# INLINEABLE decodeHex #-}
@@ -280,11 +280,4 @@ decodeHex u l
 
 unsafeDecodeHex ∷ Word8 → Word8 → Word8
 {-# INLINEABLE unsafeDecodeHex #-}
-unsafeDecodeHex u l = (decodeHalf u `shiftL` 4) .|. decodeHalf l
-    where
-      decodeHalf ∷ Word8 → Word8
-      {-# INLINEABLE decodeHalf #-}
-      decodeHalf w
-          | w ≥ 0x30 ∧ w ≤ 0x39 = w - 0x30      -- '0'..'9'
-          | w ≥ 0x61            = w - 0x61 + 10 -- 'a'..'f'
-          | otherwise           = w - 0x65 + 10 -- 'A'..'F'
+unsafeDecodeHex u l = (htoi u `shiftL` 4) .|. htoi l

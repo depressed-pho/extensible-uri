@@ -168,34 +168,34 @@ pIPv6Addr = IPv6Addr <$>
               do _ ← string "::"
                  x ← countV 5 (h16 <* char ':')
                  y ← ls32
-                 pure $ (∅) `pad` x ⊕ y
+                 pure $ (∅) `pad` (x ⊕ y)
 
             , -- [               h16 ] "::" 4( h16 ":" ) ls32
               do x ← option (∅) (GV.singleton <$> h16)
                  _ ← string "::"
                  y ← countV 4 (h16 <* char ':')
                  z ← ls32
-                 pure $ x `pad` y ⊕ z
+                 pure $ x `pad` (y ⊕ z)
 
             , -- [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 1 (h16 <* char ':') ⊛ h16)
+                       (GV.cons <$> h16 ⊛ countUpToV 1 (char ':' *> h16))
                  _ ← string "::"
                  y ← countV 3 (h16 <* char ':')
                  z ← ls32
-                 pure $ x `pad` y ⊕ z
+                 pure $ x `pad` (y ⊕ z)
 
             , -- [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 2 (h16 <* char ':') ⊛ h16)
+                       (GV.cons <$> h16 ⊛ countUpToV 2 (char ':' *> h16))
                  _ ← string "::"
                  y ← countV 2 (h16 <* char ':')
                  z ← ls32
-                 pure $ x `pad` y ⊕ z
+                 pure $ x `pad` (y ⊕ z)
 
             , -- [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 3 (h16 <* char ':') ⊛ h16)
+                       (GV.cons <$> h16 ⊛ countUpToV 3 (char ':' *> h16))
                  _ ← string "::"
                  y ← h16 <* char ':'
                  z ← ls32
@@ -203,21 +203,21 @@ pIPv6Addr = IPv6Addr <$>
 
             , -- [ *4( h16 ":" ) h16 ] "::"              ls32
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 4 (h16 <* char ':') ⊛ h16)
+                       (GV.cons <$> h16 ⊛ countUpToV 4 (char ':' *> h16))
                  _ ← string "::"
                  y ← ls32
                  pure $ x `pad` y
 
             , -- [ *5( h16 ":" ) h16 ] "::"              h16
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 5 (h16 <* char ':') ⊛ h16)
+                       (GV.cons <$> h16 ⊛ countUpToV 5 (char ':' *> h16))
                  _ ← string "::"
                  y ← h16
                  pure $ x `pad` GV.singleton y
 
             , -- [ *6( h16 ":" ) h16 ] "::"
               do x ← option (∅)
-                       (GV.snoc <$> countUpToV 6 (h16 <* char ':') ⊛ h16)
+                       (GV.cons <$> h16 ⊛ countUpToV 6 (char ':' *> h16))
                  _ ← string "::"
                  pure $ x `pad` (∅)
             ]
@@ -336,9 +336,9 @@ wZeroes ∷ ∀n. Whole n ⇒ n → Write
 wZeroes = go (∅)
     where
       go ∷ Write → n → Write
-      go _   0 = (∅)
-      go _   1 = BB.writeChar '0'
-      go !w !n = go (w ⊕ BB.writeChar ':' ⊕ BB.writeChar '0') (n-1)
+      go !w  0 = w
+      go !w  1 = w ⊕ BB.writeChar '0'
+      go !w !n = go (BB.writeChar '0' ⊕ BB.writeChar ':' ⊕ w) (n-1)
 
 findPosToShorten ∷ CompressedIPv6Addr → Maybe Int
 {-# INLINE findPosToShorten #-}
